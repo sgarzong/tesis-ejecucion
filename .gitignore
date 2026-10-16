@@ -1,0 +1,19 @@
+# Imágenes y datos del corpus: no se versionan (volumen y datos de Industrias Ales)
+data/
+*.jpg
+*.jpeg
+*.png
+!docs/**/*.png
+
+# Artefactos de entrenamiento
+runs/
+*.keras
+*.tflite
+saved_model/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.ipynb_checkpoints/
