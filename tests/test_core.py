@@ -8,6 +8,7 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from tesis.build_dataset import NO_STORE, date_of, merge_aliases, store_of
 from tesis.config import CLASSES
+from tesis.degrade import degrade, shake_psf
 from tesis.metrics import IDX, conditional_pred, failed_criteria, verification
 from tesis.sort_gui import DISCARD, copy_name, paginate, place
 from tesis.split import assign_stores, experiment
@@ -92,7 +93,20 @@ def test_store_and_date():
     assert date_of("TC_12345.jpeg") == ""
 
 
+def test_degrade_keeps_overlay():
+    rng = np.random.default_rng(0)
+    k = shake_psf(40, rng)
+    assert abs(k.sum() - 1) < 1e-9 and 38 <= np.ptp(np.nonzero(k), axis=1).max() <= 42
+    img = np.full((400, 300, 3), 120, np.uint8)
+    img[5:45, 240:280] = 255
+    img[15:35, 250:270] = 40  # logo de Timestamp Camera: cuadro blanco con lente oscura
+    out, _ = degrade(img, "oscura_movida", rng)
+    assert (out[5:45, 240:280] == img[5:45, 240:280]).all()  # se estampa después de la captura: nítido
+    assert out[100:300, :200].mean() < 30  # la escena queda fuera del rango de los aumentos de brillo
+
+
 if __name__ == "__main__":
+    test_degrade_keeps_overlay()
     test_store_and_date()
     import tempfile
     test_split_no_leak_and_stable()

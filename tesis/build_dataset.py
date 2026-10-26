@@ -26,6 +26,7 @@ FOTOS = PureWindowsPath(r"C:\Users\sebas\Downloads\proyecto-20260627T133347Z-3-0
                         r"\clasificacion_ales\fotos")
 CHAINS = {"TIA": "TIA", "ROSADO": "ROSADO", "FAVORITA": "FAVORITA", "SANTAMARIA": "SANTAMARIA", "CORAL": "CORAL"}
 NO_STORE = "SIN_LOCAL"  # fotos sin carpeta de local: un solo grupo, así no se filtran entre particiones
+SINT = Path("data/sinteticas/sinteticas.csv")  # capturas inválidas sintéticas (tesis.degrade)
 # Observado en el corpus: a veces la carpeta del mercaderista falta y en su lugar del local queda una de visita.
 VISIT = re.compile(r"SEMANA|PARTE|^BRENDA")
 TYPO = {"HIPERMAKET": "HIPERMARKET", "HIPEMARKET": "HIPERMARKET", "HIPER": "HIPERMARKET", "COMISARROATO": "COMISARIATO"}
@@ -116,16 +117,23 @@ def main(revision=Path("data/clasificadas/revision.csv")):
                      "carpeta": " | ".join(pp)})
     shutil.copy2(revision, out / "revision.csv")
     m = pd.DataFrame(rows)
+    if SINT.exists():  # tesis.degrade: heredan local y fecha de su origen (misma partición, sin fuga)
+        s = pd.read_csv(SINT)
+        src_of = m.assign(origen=m.path.str.rsplit("/", n=1).str[-1]).set_index("origen")
+        s = s[s.origen.isin(src_of.index)]  # si el origen se descartó después, su sintética sale
+        m = pd.concat([m, src_of.loc[s.origen, ["store", "date", "carpeta"]].reset_index(drop=True).assign(
+            path=s.path.values, label="captura_invalida", source="sint", verified=0)], ignore_index=True)
     m["store"] = m.store.replace(ALIAS)
     m["store"] = m.store.map(merge_aliases(m.store))
     # Auditoría de la agrupación: qué carpetas de origen quedaron en cada local.
     (m.assign(local_carpeta=m.carpeta.str.split(" \\| ").map(lambda p: p[3] if len(p) > 3 else ""))
       .groupby(["store", "local_carpeta"]).size().rename("fotos").reset_index()
       .to_csv("data/locales.csv", index=False))
-    m.drop(columns="carpeta").to_csv("data/manifest.csv", index=False)
+    m.drop(columns="carpeta")[["path", "label", "store", "date", "source", "verified"]].to_csv(
+        "data/manifest.csv", index=False)
     print(f"{len(m)} fotos en {out} · {m.store.nunique()} locales · sin fecha {(m.date == '').sum()}"
           f" · sin local {(m.store == NO_STORE).sum()} · sin copia (omitidas) {missing}")
-    print(m.groupby(["label"]).agg(fotos=("path", "size"), locales=("store", "nunique")).to_string())
+    print(m.groupby(["label", "source"]).agg(fotos=("path", "size"), locales=("store", "nunique")).to_string())
 
 
 if __name__ == "__main__":
