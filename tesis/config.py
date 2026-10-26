@@ -11,6 +11,11 @@ CLASSES = [
 ]
 REJECT = {"captura_invalida", "contenido_ajeno"}
 
+# Clases del ResNet-18 de explicabilidad (preetiquetado) -> CLASSES. ISLA_RUMA_BIOMBO = ruma.
+# GANCHERA no está en la taxonomía (sección 2.2): se sugiere como contenido ajeno y el revisor decide.
+TO_TESIS = {"CABECERA_FINAL": "cabecera", "CHECK": "check_out", "CHICLERA": "chiclera",
+            "ISLA_RUMA_BIOMBO": "exhibidor_piso", "LATERAL": "lateral", "GANCHERA": "contenido_ajeno"}
+
 MODELS = ["resnet50", "mobilenetv3", "efficientnetb0"]
 IMG_SIZE = 224
 SEED = 42

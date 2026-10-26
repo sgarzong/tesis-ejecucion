@@ -6,8 +6,10 @@ import numpy as np
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from tesis.build_dataset import NO_STORE, date_of, merge_aliases, store_of
 from tesis.config import CLASSES
 from tesis.metrics import IDX, conditional_pred, failed_criteria, verification
+from tesis.sort_gui import DISCARD, copy_name, paginate, place
 from tesis.split import assign_stores, experiment
 
 
@@ -51,8 +53,52 @@ def test_failed_criteria():
     assert failed_criteria({**ok, "size_mb": 25, "f1_macro": .8}) == ["f1_macro", "size_mb"]
 
 
+def test_place_moves_copy(tmp_path):
+    src = tmp_path / "a.jpg"
+    src.write_bytes(b"x")
+    out, p = tmp_path / "out", str(src)
+    copies = lambda: sorted(f.parent.name for f in out.rglob("*.jpg"))
+    place(out, p, None, "lateral")
+    assert copies() == ["lateral"]
+    place(out, p, "lateral", "cabecera")  # corrección: la copia se mueve, no se duplica
+    assert copies() == ["cabecera"]
+    place(out, p, "cabecera", DISCARD)
+    assert copies() == [] and src.exists()
+    assert copy_name(p) != copy_name(str(tmp_path / "otro" / "a.jpg"))
+
+
+def test_paginate_one_class_per_page():
+    rows = [{"label": c} for c in ["cabecera"] * 5 + ["lateral"] * 2]
+    assert [[r["label"] for r in pg] for pg in paginate(rows, 3)] == [
+        ["cabecera"] * 3, ["cabecera"] * 2, ["lateral"] * 2]
+
+
+def test_store_and_date():
+    tia = "TIENDAS INDUSTRIALES ASOCIADAS TIA S.A"
+    # El código identifica al local aunque cambien las iniciales del supervisor o el orden de carpetas.
+    assert store_of((tia, "SARA", "MERC", "417 - CALDERON CSS")) == "TIA 417"
+    assert store_of(("BEATRIZ CHOEZ", tia, "MERC", "417.- CALDERON JGC", "Semana 3")) == "TIA 417"
+    assert store_of(("GERARDO ORTIZ CORAL", "K", "M", "Coral batan")) == store_of(("GERALDO ORTIZ CORAL", "K", "M", "BATÁN"))
+    assert store_of((tia, "CARLA CASTRO")) == NO_STORE
+    assert store_of((tia, "S", "M", "TIA PRADERA 597")) == "TIA 597"
+    assert store_of(("CORPORACION ROSADO", "S", "HIPERMARKET AMBATO", "SEMANA 2")) == "ROSADO HIPERMARKET AMBATO"
+    assert store_of(("CORPORACION ROSADO", "S", "M", "MI COMISARIATO YAGUACHI")) == "ROSADO COMISARIATO YAGUACHI"
+    keys = pd.Series(["ROSADO HIPERMARKET RIOCENTRO EL DORAD"] * 3 + ["ROSADO HIPERMARKET RIOCENTRO EL DORADO",
+                     "ROSADO COMISARIATO JUAN TANGA", "ROSADO COMISARIATO JUAN TANCA", "ROSADO COMISARIATO SUR"])
+    assert keys.map(merge_aliases(keys)).nunique() == 3
+    assert date_of("TimePhoto_20240410_091922.jpg") == "2024-04-10"
+    assert date_of("WhatsApp Image 2025-03-02 at 10.11.12 (1).jpeg") == "2025-03-02"
+    assert date_of("1712745562000.jpg") == "2024-04-10"
+    assert date_of("TC_12345.jpeg") == ""
+
+
 if __name__ == "__main__":
+    test_store_and_date()
+    import tempfile
     test_split_no_leak_and_stable()
     test_conditional_and_verification()
     test_failed_criteria()
+    with tempfile.TemporaryDirectory() as d:
+        test_place_moves_copy(Path(d))
+    test_paginate_one_class_per_page()
     print("ok")
