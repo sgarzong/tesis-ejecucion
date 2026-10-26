@@ -5,8 +5,8 @@
 - data/entrenamiento/<clase>/<foto>: enlaces duros a las copias de data/clasificadas. No ocupan espacio
   extra y quedan congelados aunque se siga revisando. Se rehace completo en cada ejecución, junto con una
   copia de la revisión usada (data/entrenamiento/revision.csv).
-- data/manifest.csv: path,label,store,date,source,verified (formato de tesis.split). Solo fotos revisadas
-  y no descartadas.
+- data/manifest.csv: path,label,store,date,source,verified (formato de tesis.split). Solo fotos revisadas,
+  no descartadas, con local conocido y sin cuasi-duplicados dentro del local.
 
 Ruta de origen: <fotos>/<cadena y supervisor, en cualquier orden>/<mercaderista>/<LOCAL>/.../<archivo>.
 """
@@ -16,11 +16,13 @@ import re
 import shutil
 import sys
 import unicodedata
+from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path, PureWindowsPath
 
 import pandas as pd
 
 from .sort_gui import DISCARD, copy_name
+from .split import dhash, near_duplicates
 
 FOTOS = PureWindowsPath(r"C:\Users\sebas\Downloads\proyecto-20260627T133347Z-3-001\proyecto"
                         r"\clasificacion_ales\fotos")
@@ -33,6 +35,9 @@ TYPO = {"HIPERMAKET": "HIPERMARKET", "HIPEMARKET": "HIPERMARKET", "HIPER": "HIPE
 # Variantes revisadas a mano que las reglas no unen. Revisar data/locales.csv y agregar aquí.
 ALIAS = {"ROSADO HIPERMARKET TRONCAL": "ROSADO HIPERMARKET LA TRONCAL", "TIA VINCES KVDS": "TIA VINCES"}
 PREFIX = {"MI", "TIA", "SMS", "CORAL"}  # 'MI COMISARIATO X' = 'COMISARIATO X', 'TIA TIA X' = 'TIA X'
+GENERIC = {"HIPERMARKET", "COMISARIATO", "FERRISARIATO", "SUPERMAXI", "SUPER", "AKI", "MEGA", "GRAN", "CENTRO",
+           "MALL", "PLAZA", "LA", "EL", "DE", "DEL", "LOS", "LAS", "Y"}
+HASHES = Path("data/hashes.csv")  # caché de dhash por foto
 
 
 def norm(s):
@@ -64,26 +69,34 @@ def store_of(parts):
     return f"{chain} {' '.join(toks)}"
 
 
+def core(key):
+    """Nombre del local sin la cadena ni palabras genéricas: 'ROSADO HIPERMARKET VIA DAULE' -> 'VIA DAULE'."""
+    return " ".join(t for t in key.split(" ", 1)[-1].split() if t not in GENERIC)
+
+
 def merge_aliases(keys):
-    """Une variantes de un mismo local de la misma cadena: nombre truncado ('EL DORAD' / 'EL DORADO') o
-    errata (similitud >= 0.95). Devuelve dict clave -> canónica (la más frecuente)."""
+    """Une en un grupo los locales de nombre parecido de la misma cadena. Unir dos locales distintos solo
+    agranda un grupo; dejar separados dos nombres del mismo local filtra fotos entre particiones. Por eso la
+    regla es generosa: un núcleo contenido en el otro (DAULE en VIA DAULE) o similitud >= 0.85 (erratas,
+    truncados), con cierre transitivo. Los locales con código no se tocan. Devuelve dict clave -> grupo."""
     counts = keys.value_counts()
-    canon, alias = [], {}
-    for k in counts.index:
-        name = k.split(" ", 1)[-1]
-        target = None
-        if k != NO_STORE and not name[:1].isdigit():
-            for c in canon:
-                same_chain = c.split(" ", 1)[0] == k.split(" ", 1)[0] and not c.split(" ", 1)[-1][:1].isdigit()
-                short = min(len(name), len(c.split(" ", 1)[-1]))
-                if same_chain and ((short >= 10 and (c.startswith(k) or k.startswith(c)))
-                                   or difflib.SequenceMatcher(None, c, k).ratio() >= 0.95):
-                    target = c
-                    break
-        alias[k] = target or k
-        if not target:
-            canon.append(k)
-    return alias
+    parent = {k: k for k in counts.index}
+
+    def find(k):
+        while parent[k] != k:
+            k = parent[k]
+        return k
+
+    named = [k for k in counts.index if k != NO_STORE and core(k) and not k.split(" ", 1)[-1].isdigit()]
+    for i, a in enumerate(named):  # en orden de frecuencia: la raíz de cada grupo es su nombre más usado
+        for b in named[i + 1:]:
+            if a.split(" ", 1)[0] != b.split(" ", 1)[0]:
+                continue
+            ca, cb = core(a), core(b)
+            if set(ca.split()) <= set(cb.split()) or set(cb.split()) <= set(ca.split()) \
+                    or difflib.SequenceMatcher(None, ca, cb).ratio() >= .85:
+                parent[find(b)] = find(a)
+    return {k: find(k) for k in counts.index}
 
 
 def date_of(name):
@@ -95,6 +108,25 @@ def date_of(name):
     else:
         return ""
     return d.strftime("%Y-%m-%d") if pd.notna(d) and 2023 <= d.year <= 2026 else ""
+
+
+def safe_dhash(path):
+    try:
+        return dhash(path)
+    except OSError:
+        return 0  # ilegible: todas las ilegibles de un local cuentan como una sola
+
+
+def dhashes(paths):
+    """dhash de cada foto, con caché por nombre de archivo (estable entre reconstrucciones)."""
+    cache = pd.read_csv(HASHES, dtype=str).set_index("name").hash.to_dict() if HASHES.exists() else {}
+    names = [p.rsplit("/", 1)[-1] for p in paths]
+    todo = [p for p, n in zip(paths, names) if n not in cache]
+    with ProcessPoolExecutor() as ex:
+        for p, h in zip(todo, ex.map(safe_dhash, todo, chunksize=64)):
+            cache[p.rsplit("/", 1)[-1]] = str(h)
+    pd.DataFrame({"name": list(cache), "hash": list(cache.values())}).to_csv(HASHES, index=False)
+    return [int(cache[n]) for n in names]
 
 
 def main(revision=Path("data/clasificadas/revision.csv")):
@@ -125,14 +157,26 @@ def main(revision=Path("data/clasificadas/revision.csv")):
             path=s.path.values, label="captura_invalida", source="sint", verified=0)], ignore_index=True)
     m["store"] = m.store.replace(ALIAS)
     m["store"] = m.store.map(merge_aliases(m.store))
+    # Sin local conocido no se puede garantizar que la foto no sea de un local de prueba: fuera.
+    gone = m.store == NO_STORE
+    # Cuasi-duplicados (ráfagas del mismo mueble) dentro de cada local: queda la primera por fecha.
+    h = m[(m.source == "hist") & ~gone].sort_values(["store", "date", "path"])
+    h["hash"] = pd.Series(dhashes(h.path), index=h.index, dtype=object)  # 64 bits: no cabe en int64
+    drop = m.index[gone].union(h.index[near_duplicates(h)])
+    for p in m.path[drop]:
+        if p.startswith(out.as_posix()):  # enlaces propios; las sintéticas de data/sinteticas no se borran
+            Path(p).unlink()
+    print(f"fuera: sin local {gone.sum()} · cuasi-duplicados {len(drop) - gone.sum()}")
+    m = m.drop(drop)
     # Auditoría de la agrupación: qué carpetas de origen quedaron en cada local.
     (m.assign(local_carpeta=m.carpeta.str.split(" \\| ").map(lambda p: p[3] if len(p) > 3 else ""))
       .groupby(["store", "local_carpeta"]).size().rename("fotos").reset_index()
       .to_csv("data/locales.csv", index=False))
     m.drop(columns="carpeta")[["path", "label", "store", "date", "source", "verified"]].to_csv(
         "data/manifest.csv", index=False)
-    print(f"{len(m)} fotos en {out} · {m.store.nunique()} locales · sin fecha {(m.date == '').sum()}"
-          f" · sin local {(m.store == NO_STORE).sum()} · sin copia (omitidas) {missing}")
+    sizes = m.store.value_counts()
+    print(f"{len(m)} fotos en {out} · {len(sizes)} locales (el mayor: {sizes.index[0]}, {sizes.iloc[0]} fotos)"
+          f" · sin fecha {(m.date == '').sum()} · sin copia (omitidas) {missing}")
     print(m.groupby(["label", "source"]).agg(fotos=("path", "size"), locales=("store", "nunique")).to_string())
 
 

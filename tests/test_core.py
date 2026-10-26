@@ -85,8 +85,14 @@ def test_store_and_date():
     assert store_of(("CORPORACION ROSADO", "S", "HIPERMARKET AMBATO", "SEMANA 2")) == "ROSADO HIPERMARKET AMBATO"
     assert store_of(("CORPORACION ROSADO", "S", "M", "MI COMISARIATO YAGUACHI")) == "ROSADO COMISARIATO YAGUACHI"
     keys = pd.Series(["ROSADO HIPERMARKET RIOCENTRO EL DORAD"] * 3 + ["ROSADO HIPERMARKET RIOCENTRO EL DORADO",
-                     "ROSADO COMISARIATO JUAN TANGA", "ROSADO COMISARIATO JUAN TANCA", "ROSADO COMISARIATO SUR"])
-    assert keys.map(merge_aliases(keys)).nunique() == 3
+                     "ROSADO COMISARIATO JUAN TANGA", "ROSADO COMISARIATO JUAN TANCA", "ROSADO COMISARIATO SUR",
+                     "ROSADO HIPERMARKET DAULE", "ROSADO HIPERMARKET 12 5 VIA DAULE", "ROSADO HIPERMARKET MANTA",
+                     "SANTAMARIA CENTRO", "SANTAMARIA LATACUNGA CENTRO", "SANTAMARIA LATACUNGA", "TIA 417"])
+    g = merge_aliases(keys)
+    assert g["ROSADO HIPERMARKET DAULE"] == g["ROSADO HIPERMARKET 12 5 VIA DAULE"]  # núcleo contenido
+    assert g["SANTAMARIA LATACUNGA"] == g["SANTAMARIA LATACUNGA CENTRO"]
+    assert g["SANTAMARIA CENTRO"] == "SANTAMARIA CENTRO"  # solo palabras genéricas: no arrastra a nadie
+    assert keys.map(g).nunique() == 8
     assert date_of("TimePhoto_20240410_091922.jpg") == "2024-04-10"
     assert date_of("WhatsApp Image 2025-03-02 at 10.11.12 (1).jpeg") == "2025-03-02"
     assert date_of("1712745562000.jpg") == "2024-04-10"

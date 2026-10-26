@@ -20,9 +20,15 @@ MODELS = ["resnet50", "mobilenetv3", "efficientnetb0"]
 IMG_SIZE = 224
 SEED = 42
 
-# Superposición de Timestamp Camera (esquina inferior derecha), como fracción de ancho y alto.
-# Valor de calibración: ajustar mirando muestras reales de ambos corpus.
-MASK_W, MASK_H = 0.55, 0.22
+# Texto de Timestamp Camera (abajo a la derecha, en fotos verticales y apaisadas), como fracción de ancho y alto.
+# Se enmascara porque su última línea es el nombre del local, que delata la clase vía el convenio (también en
+# ODK, que usa la misma app). Calibrado midiendo el texto en 777 fotos (400 verticales, 377 apaisadas): cubre
+# hasta 0.27/0.33 de alto (p90 vertical/apaisada) y 0.70 de ancho. Lo que asoma en el 10 % restante son las
+# líneas de fecha (arriba); el nombre del local siempre queda dentro.
+MASK_W, MASK_H = 0.70, 0.33
+# Logo de la app (arriba a la derecha, p90 0.19 x 0.17). No se enmascara: aparece igual en todas las fotos de
+# ambos corpus y no informa la clase. tesis.degrade usa la zona para restaurarlo nítido en las sintéticas.
+LOGO_W, LOGO_H = 0.20, 0.20
 
 # Tope de imágenes por local en entrenamiento (riesgo 5, sección 5.2). Calibrar.
 MAX_PER_STORE = 300

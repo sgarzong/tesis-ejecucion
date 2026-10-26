@@ -63,7 +63,9 @@ def experiment(df, stores, exp="A"):
 
 def dhash(path, size=8):
     """Huella perceptual de 64 bits (difference hash)."""
-    px = np.asarray(Image.open(path).convert("L").resize((size + 1, size)), dtype=np.int16)
+    img = Image.open(path)
+    img.draft("L", (size * 8, size * 8))  # JPEG: decodifica ya reducida, decenas de veces más rápido
+    px = np.asarray(img.convert("L").resize((size + 1, size)), dtype=np.int16)
     return int("".join("1" if b else "0" for b in (px[:, 1:] > px[:, :-1]).flatten()), 2)
 
 

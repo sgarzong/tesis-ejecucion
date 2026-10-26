@@ -35,7 +35,7 @@ import pandas as pd
 from PIL import Image, ImageOps
 from scipy import ndimage, signal
 
-from .config import MASK_H, MASK_W, REJECT, SEED, TO_TESIS
+from .config import LOGO_H, LOGO_W, MASK_H, MASK_W, REJECT, SEED, TO_TESIS
 
 OUT = Path("data/sinteticas")
 WORK = 1024  # lado largo de trabajo: sobra para 224 px y acota el costo de las convoluciones
@@ -92,7 +92,7 @@ def overlay_alpha(img):
     h, w = img.shape[:2]
     white = img.min(axis=2) >= 240
     alpha = np.zeros_like(white)
-    y1, x0 = int(h * .15), int(w * .75)
+    y1, x0 = int(h * (LOGO_H + .02)), int(w * (1 - LOGO_W - .10))  # holgura: el recuadro se ajusta abajo
     lab, n = ndimage.label(ndimage.binary_closing(white[:y1, x0:], iterations=max(2, w // 80)))
     if n:
         sizes = ndimage.sum(np.ones_like(lab), lab, range(1, n + 1))
