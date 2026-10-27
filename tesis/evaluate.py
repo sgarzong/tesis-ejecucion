@@ -22,8 +22,13 @@ def predict(model_path, df):
     ds = dataset(df, batch=1 if model_path.suffix == ".tflite" else 64)
     if model_path.suffix != ".tflite":
         return keras.models.load_model(model_path).predict(ds)
-    it = tf.lite.Interpreter(str(model_path))
-    it.allocate_tensors()
+    try:
+        it = tf.lite.Interpreter(str(model_path))
+        it.allocate_tensors()
+    except RuntimeError:  # XNNPACK no prepara el MobileNetV3 int8: kernels estándar, mismos resultados
+        it = tf.lite.Interpreter(str(model_path), experimental_op_resolver_type=(
+            tf.lite.experimental.OpResolverType.BUILTIN_WITHOUT_DEFAULT_DELEGATES))
+        it.allocate_tensors()
     inp, out = it.get_input_details()[0]["index"], it.get_output_details()[0]["index"]
     probs = []
     for x, _ in ds:
