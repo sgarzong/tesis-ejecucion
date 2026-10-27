@@ -17,24 +17,27 @@ AUGMENT = keras.Sequential([
 
 def _load(path, label):
     img = tf.io.decode_image(tf.io.read_file(path), channels=3, expand_animations=False)
-    return tf.image.resize(img, (IMG_SIZE, IMG_SIZE)), label
+    img = tf.image.resize(img, (IMG_SIZE, IMG_SIZE))
+    return tf.cast(tf.clip_by_value(tf.round(img), 0, 255), tf.uint8), label  # uint8: 4x menos RAM en caché
 
 
 def _jpeg(img, label):
-    img = tf.image.random_jpeg_quality(tf.cast(img, tf.uint8), 40, 95)  # compresión con pérdida
+    img = tf.image.random_jpeg_quality(img, 40, 95)  # compresión con pérdida
+    return tf.cast(img, tf.float32), label
+
+
+def _float(img, label):
     return tf.cast(img, tf.float32), label
 
 
 def dataset(df, batch=32, train=False):
-    """df con columnas path y label (nombre de clase). Imágenes float32 en [0, 255]."""
+    """df con columnas path y label (nombre de clase). Imágenes float32 en [0, 255].
+    Las fotos se decodifican una vez y quedan en RAM (cache); los aumentos se sortean en cada época."""
     labels = df.label.map(CLASSES.index).values
     ds = tf.data.Dataset.from_tensor_slices((df.path.values, labels))
-    if train:
-        ds = ds.shuffle(len(df), seed=SEED)
-    ds = ds.map(_load, num_parallel_calls=tf.data.AUTOTUNE)
-    if train:
-        ds = ds.map(_jpeg, num_parallel_calls=tf.data.AUTOTUNE)
-        ds = ds.batch(batch).map(lambda x, y: (AUGMENT(x, training=True), y), num_parallel_calls=tf.data.AUTOTUNE)
+    ds = ds.map(_load, num_parallel_calls=tf.data.AUTOTUNE).cache()
+    if train:  # AUGMENT no va aquí sino en train.py, envolviendo al modelo: así corre en la GPU
+        ds = ds.shuffle(len(df), seed=SEED).map(_jpeg, num_parallel_calls=tf.data.AUTOTUNE).batch(batch)
     else:
-        ds = ds.batch(batch)
+        ds = ds.map(_float, num_parallel_calls=tf.data.AUTOTUNE).batch(batch)
     return ds.prefetch(tf.data.AUTOTUNE)

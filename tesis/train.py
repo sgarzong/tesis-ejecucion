@@ -14,7 +14,7 @@ import pandas as pd
 from sklearn.utils.class_weight import compute_class_weight
 
 from .config import CLASSES, IMG_SIZE, MASK_H, MASK_W, MODELS, SEED
-from .data import dataset
+from .data import AUGMENT, dataset
 from .split import experiment
 
 
@@ -65,8 +65,10 @@ def main():
     weights = dict(zip(present.tolist(), compute_class_weight("balanced", classes=present, y=y)))
 
     model = build_model(args.model, mask=not args.no_mask)
-    model.compile(keras.optimizers.Adam(args.lr), "sparse_categorical_crossentropy", metrics=["accuracy"])
-    model.fit(
+    # Los aumentos envuelven al modelo solo para entrenar (corren en la GPU); se guarda `model`, sin ellos.
+    trainer = keras.Sequential([keras.Input((IMG_SIZE, IMG_SIZE, 3)), AUGMENT, model])
+    trainer.compile(keras.optimizers.Adam(args.lr), "sparse_categorical_crossentropy", metrics=["accuracy"])
+    trainer.fit(
         dataset(parts["train"], args.batch, train=True),
         validation_data=dataset(parts["val"], args.batch),
         epochs=args.epochs,
