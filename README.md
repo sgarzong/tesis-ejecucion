@@ -15,9 +15,9 @@ clases**, para alertar en el mismo teléfono cuando la evidencia no sirve:
 ## Dónde empezar
 
 **[`notebooks/proyecto_ml.ipynb`](notebooks/proyecto_ml.ipynb)** es el entregable del proyecto de ML: introducción,
-EDA, extracción de características con transfer learning (MobileNetV3-Large y EfficientNet-B0 congeladas), pipeline de
-scikit-learn con selección tipo filtro, optimización de hiperparámetros con Optuna y k-fold repetido **agrupado por
-local**, curva de aprendizaje, comparación estadística 10×10 (Wilcoxon y t-test corregido de Nadeau-Bengio), t-SNE,
+EDA, modelo por transfer learning (MobileNetV3-Large y EfficientNet-B0 congeladas + regresión logística en un pipeline
+de scikit-learn), optimización de λ con Optuna y k-fold repetido **agrupado por local** (curva de sesgo y varianza),
+tamaño de entrenamiento m\* según la curva de aprendizaje, comparación estadística 10×10 (Wilcoxon y t-test corregido de Nadeau-Bengio), t-SNE,
 evaluación en prueba, conclusiones y referencias IEEE.
 
 Para correrlo en Google Colab:
