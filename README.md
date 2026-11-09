@@ -27,7 +27,8 @@ Para correrlo en Google Colab:
    calcula y guarda los rasgos, y corre todo (≈ 1.5 h en una A100).
 
 [`notebooks/entrenar_tesis.ipynb`](notebooks/entrenar_tesis.ipynb) hace el ajuste fino de punta a punta del protocolo
-de la tesis (3 arquitecturas, experimentos A y B, control sin máscara), la cuantización a TFLite int8 y la evaluación.
+de la tesis (3 arquitecturas, experimentos A y B, control sin máscara), la cuantización a TFLite int8 y la evaluación,
+y el experimento de cuantización para el teléfono (float16, int8 de rango dinámico, int8 con calibración balanceada).
 
 ## Datos
 

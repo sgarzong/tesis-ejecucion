@@ -36,12 +36,12 @@ def report(y, probs, stores=None, contracts=None):
     return out
 
 
-def bootstrap_f1_diff(y, pred_a, pred_b, stores, n=2000, seed=0):
-    """IC 95 % de F1-macro(a) - F1-macro(b) con remuestreo por local."""
+def bootstrap_f1_diff(y, pred_a, pred_b, stores, n=2000, seed=0, labels=None):
+    """IC 95 % de F1-macro(a) - F1-macro(b) con remuestreo por local. `labels`: clases que promedia (todas)."""
     rng = np.random.default_rng(seed)
     stores = np.asarray(stores)
     groups = [np.flatnonzero(stores == s) for s in np.unique(stores)]
-    labels = list(range(len(CLASSES)))
+    labels = list(range(len(CLASSES))) if labels is None else labels
     diffs = []
     for _ in range(n):
         idx = np.concatenate([groups[i] for i in rng.integers(len(groups), size=len(groups))])
