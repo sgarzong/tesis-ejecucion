@@ -44,8 +44,10 @@ orden, y cada paso es reproducible:
 | 6 | `tesis.export` | Fotos derechas (EXIF aplicado) a 320 px y el paquete para Colab |
 | — | `tesis.odk_fotos`, `tesis.odk_candidatas` | Fotos de ODK Central (sep–nov 2026) para revisarlas: SOS y Promociones como contenido ajeno; muebles alquilados, acuerdos comerciales y extravisibilidad sugeridas como el mueble declarado |
 
-`data/manifest.csv` tiene una fila por imagen: `path, label, store, date, source, verified`. `source` es `hist`
-(fotografía real) o `sint` (sintética); la prueba usa solo filas con `verified=1`.
+`data/manifest.csv` tiene una fila por imagen: `path, label, store, date, source, verified, declarado`. `source` es
+`hist` (fotografía histórica), `odk` (ODK Collect, sep–nov 2026, con el mueble `declarado` en el formulario) o `sint`
+(sintética); la prueba usa solo filas con `verified=1`. Las fotos de ODK se unen a los locales del histórico, que
+conservan su partición.
 
 ## Decisiones de diseño que importan
 

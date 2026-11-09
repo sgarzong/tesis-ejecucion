@@ -5,10 +5,14 @@
 - data/entrenamiento/<clase>/<foto>: enlaces duros a las copias de data/clasificadas. No ocupan espacio
   extra y quedan congelados aunque se siga revisando. Se rehace completo en cada ejecución, junto con una
   copia de la revisión usada (data/entrenamiento/revision.csv).
-- data/manifest.csv: path,label,store,date,source,verified (formato de tesis.split). Solo fotos revisadas,
-  no descartadas, con local conocido y sin cuasi-duplicados dentro del local.
+- data/manifest.csv: path,label,store,date,source,verified,declarado (formato de tesis.split). Solo fotos
+  revisadas, no descartadas, con local conocido y sin cuasi-duplicados dentro del local.
 
 Ruta de origen: <fotos>/<cadena y supervisor, en cualquier orden>/<mercaderista>/<LOCAL>/.../<archivo>.
+
+Fotos de ODK (sección 5.6): las revisadas en tesis.sort_gui (ODK_REVIEWS) entran con source=odk, verified=1 y
+el mueble declarado. Su local se lleva a la clave del histórico (TIA 149, SANTAMARIA OFELIA...), así un local de
+prueba sigue en prueba; los grupos del histórico no cambian al llegar ODK.
 """
 import difflib
 import os
@@ -33,11 +37,20 @@ SINT = Path("data/sinteticas/sinteticas.csv")  # capturas inválidas sintéticas
 VISIT = re.compile(r"SEMANA|PARTE|^BRENDA")
 TYPO = {"HIPERMAKET": "HIPERMARKET", "HIPEMARKET": "HIPERMARKET", "HIPER": "HIPERMARKET", "COMISARROATO": "COMISARIATO"}
 # Variantes revisadas a mano que las reglas no unen. Revisar data/locales.csv y agregar aquí.
-ALIAS = {"ROSADO HIPERMARKET TRONCAL": "ROSADO HIPERMARKET LA TRONCAL", "TIA VINCES KVDS": "TIA VINCES"}
+ALIAS = {"ROSADO HIPERMARKET TRONCAL": "ROSADO HIPERMARKET LA TRONCAL", "TIA VINCES KVDS": "TIA VINCES",
+         "ROSADO HIPERMARKET PASAJE": "ROSADO P G"}  # ODK; en el histórico, 'HIPERMARKEY PASAJE' cae en P G
 PREFIX = {"MI", "TIA", "SMS", "CORAL"}  # 'MI COMISARIATO X' = 'COMISARIATO X', 'TIA TIA X' = 'TIA X'
 GENERIC = {"HIPERMARKET", "COMISARIATO", "FERRISARIATO", "SUPERMAXI", "SUPER", "AKI", "MEGA", "GRAN", "CENTRO",
            "MALL", "PLAZA", "LA", "EL", "DE", "DEL", "LOS", "LAS", "Y"}
 HASHES = Path("data/hashes.csv")  # caché de dhash por foto
+ODK_REVIEWS = {Path("data/clasificadas_odk_muebles"): Path("data/odk/muebles_detalle.csv"),  # tesis.odk_candidatas
+               Path("data/clasificadas_odk"): Path("data/odk/candidatas_detalle.csv")}
+# Cadena en ODK (razón social o nombre corto) -> cadena del histórico. Explícito: un mercaderista o un
+# autoservicio independiente puede llamarse Santamaría o Rosado. Liris (Del Portal) solo aparece en ODK.
+ODK_CHAINS = {r"^TIA$|ASOCIADAS TIA": "TIA", r"^FAVORITA$|CORPORACION FAVORITA": "FAVORITA",
+              r"^(EL )?ROSADO$|CORPORACION EL ROSADO": "ROSADO", r"MEGA SANTA ?MARIA": "SANTAMARIA",
+              r"^CORAL$|ORTIZ CORAL": "CORAL", r"^LIRIS": "LIRIS"}
+CODED = {"TIA", "FAVORITA"}  # cadenas cuyos locales se identifican por número
 
 
 def norm(s):
@@ -56,11 +69,14 @@ def chain_of(parts):
 def store_of(parts):
     """Clave de agrupamiento 'CADENA LOCAL'. Locales con código (TIA, Favorita) se identifican por el número:
     el sufijo con iniciales ('417 - CALDERON CSS') cambia con el supervisor."""
-    chain = chain_of(parts)
     i = 2 if len(parts) > 3 and VISIT.search(norm(parts[3])) else 3
     if len(parts) <= i:
         return NO_STORE
-    toks = [TYPO.get(t, t) for t in norm(parts[i]).split()]
+    return store_key(chain_of(parts), parts[i])
+
+
+def store_key(chain, name):
+    toks = [TYPO.get(t, t) for t in norm(name).split()]
     code = toks[0] if toks[0].isdigit() else next((t for t in toks if re.fullmatch(r"\d{3}", t)), None)
     if code:
         return f"{chain} {code}"
@@ -74,11 +90,13 @@ def core(key):
     return " ".join(t for t in key.split(" ", 1)[-1].split() if t not in GENERIC)
 
 
-def merge_aliases(keys):
+def merge_aliases(keys, keep=frozenset()):
     """Une en un grupo los locales de nombre parecido de la misma cadena. Unir dos locales distintos solo
     agranda un grupo; dejar separados dos nombres del mismo local filtra fotos entre particiones. Por eso la
     regla es generosa: un núcleo contenido en el otro (DAULE en VIA DAULE) o similitud >= 0.85 (erratas,
-    truncados), con cierre transitivo. Los locales con código no se tocan. Devuelve dict clave -> grupo."""
+    truncados), con cierre transitivo. Los locales con código no se tocan. Devuelve dict clave -> grupo.
+    `keep`: grupos ya asignados (los del histórico al sumar ODK): siguen siendo raíz y no se unen entre sí,
+    así su partición en stores_split.csv no cambia."""
     counts = keys.value_counts()
     parent = {k: k for k in counts.index}
 
@@ -95,7 +113,12 @@ def merge_aliases(keys):
             ca, cb = core(a), core(b)
             if set(ca.split()) <= set(cb.split()) or set(cb.split()) <= set(ca.split()) \
                     or difflib.SequenceMatcher(None, ca, cb).ratio() >= .85:
-                parent[find(b)] = find(a)
+                ra, rb = find(a), find(b)
+                if ra in keep and rb in keep:
+                    continue
+                if rb in keep:
+                    ra, rb = rb, ra
+                parent[rb] = ra
     return {k: find(k) for k in counts.index}
 
 
@@ -108,6 +131,35 @@ def date_of(name):
     else:
         return ""
     return d.strftime("%Y-%m-%d") if pd.notna(d) and 2023 <= d.year <= 2026 else ""
+
+
+def odk_store(cadena, local):
+    """Clave 'CADENA LOCAL' de una foto de ODK, o None fuera del canal moderno."""
+    c = norm(str(cadena))
+    chain = next((v for k, v in ODK_CHAINS.items() if re.search(k, c)), None)
+    if chain is None:
+        return None
+    if chain not in CODED:  # numeración propia de ODK ('5.- OFELIA'); el histórico usa el nombre
+        local = re.sub(r"^\s*\d+\s*\.?\s*-?\s*", "", str(local))
+    return store_key(chain, local)
+
+
+def odk_rows():
+    """Fotos de ODK revisadas, con la clave de local sin unir todavía a los grupos del histórico."""
+    rows = []
+    for src, detail in ODK_REVIEWS.items():
+        if not (src / "revision.csv").exists():
+            continue
+        r = pd.read_csv(src / "revision.csv", encoding="utf-8-sig").drop_duplicates("path", keep="last")
+        d = r[r.label != DISCARD].merge(pd.read_csv(detail).drop(columns="label"), on="path")
+        for x in d.to_dict("records"):
+            store, copy = odk_store(x["cadena"], x["local"]), src / x["label"] / copy_name(x["path"])
+            if store and copy.exists():
+                rows.append({"path": copy.as_posix(), "label": x["label"], "store": store,
+                             "date": str(x["fecha"])[:10], "source": "odk", "verified": 1,
+                             "declarado": x.get("declarada", ""),
+                             "carpeta": f"ODK | {x['form']} | {x['cadena']} | {x['local']}"})
+    return pd.DataFrame(rows)
 
 
 def safe_dhash(path):
@@ -156,11 +208,20 @@ def main(revision=Path("data/clasificadas/revision.csv")):
         m = pd.concat([m, src_of.loc[s.origen, ["store", "date", "carpeta"]].reset_index(drop=True).assign(
             path=s.path.values, label="captura_invalida", source="sint", verified=0)], ignore_index=True)
     m["store"] = m.store.replace(ALIAS)
-    m["store"] = m.store.map(merge_aliases(m.store))
+    groups = merge_aliases(m.store)
+    m["store"] = m.store.map(groups)
+    o = odk_rows()
+    if len(o):  # después del histórico: sus grupos quedan fijos y ODK se une a ellos
+        o["store"] = o.store.replace(ALIAS)
+        seen = o.store.isin(groups.keys())  # nombre que el histórico ya tenía: su grupo, sin volver a comparar
+        o.loc[seen, "store"] = o.store[seen].map(groups)
+        o.loc[~seen, "store"] = o.store[~seen].map(merge_aliases(pd.concat([m.store, o.store[~seen]]),
+                                                                  keep=set(m.store)))
+        m = pd.concat([m, o], ignore_index=True)
     # Sin local conocido no se puede garantizar que la foto no sea de un local de prueba: fuera.
     gone = m.store == NO_STORE
     # Cuasi-duplicados (ráfagas del mismo mueble) dentro de cada local: queda la primera por fecha.
-    h = m[(m.source == "hist") & ~gone].sort_values(["store", "date", "path"])
+    h = m[(m.source != "sint") & ~gone].sort_values(["store", "date", "path"])
     h["hash"] = pd.Series(dhashes(h.path), index=h.index, dtype=object)  # 64 bits: no cabe en int64
     drop = m.index[gone].union(h.index[near_duplicates(h)])
     for p in m.path[drop]:
@@ -172,7 +233,7 @@ def main(revision=Path("data/clasificadas/revision.csv")):
     (m.assign(local_carpeta=m.carpeta.str.split(" \\| ").map(lambda p: p[3] if len(p) > 3 else ""))
       .groupby(["store", "local_carpeta"]).size().rename("fotos").reset_index()
       .to_csv("data/locales.csv", index=False))
-    m.drop(columns="carpeta")[["path", "label", "store", "date", "source", "verified"]].to_csv(
+    m.reindex(columns=["path", "label", "store", "date", "source", "verified", "declarado"]).to_csv(
         "data/manifest.csv", index=False)
     sizes = m.store.value_counts()
     print(f"{len(m)} fotos en {out} · {len(sizes)} locales (el mayor: {sizes.index[0]}, {sizes.iloc[0]} fotos)"

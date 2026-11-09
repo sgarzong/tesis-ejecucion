@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from tesis.build_dataset import NO_STORE, date_of, merge_aliases, store_of
+from tesis.build_dataset import NO_STORE, date_of, merge_aliases, odk_store, store_of
 from tesis.config import CLASSES
 from tesis.degrade import degrade, shake_psf
 from tesis.metrics import IDX, conditional_pred, failed_criteria, verification
@@ -93,6 +93,17 @@ def test_store_and_date():
     assert g["SANTAMARIA LATACUNGA"] == g["SANTAMARIA LATACUNGA CENTRO"]
     assert g["SANTAMARIA CENTRO"] == "SANTAMARIA CENTRO"  # solo palabras genéricas: no arrastra a nadie
     assert keys.map(g).nunique() == 8
+    # ODK: misma clave que el histórico; fuera lo que no es de una cadena del canal moderno.
+    assert odk_store("TIENDAS INDUSTRIALES ASOCIADAS TIA S.A.", "149 - DAULE") == "TIA 149"
+    assert odk_store("Corporacion Favorita S A", "714-MEGAMAXI EL CONDADO") == "FAVORITA 714"
+    assert odk_store("Mega Santamaría", "5.- OFELIA") == "SANTAMARIA OFELIA"
+    assert odk_store("CORPORACION EL ROSADO S.A.", "HIPEMARKET BUIJO") == "ROSADO HIPERMARKET BUIJO"
+    assert odk_store("ACOSTA SANTAMARIA EDGAR PATRICIO", "ACOSTA SANTAMARIA EDGAR PATRICIO") is None
+    assert odk_store("FARCOMED/FYBECA/GPF", "FYBECA ANTONIO ANTE") is None
+    # Al sumar ODK, los grupos ya asignados quedan como raíz y no se unen entre sí a través de un nombre nuevo.
+    hist = {"SANTAMARIA LATACUNGA", "SANTAMARIA LATACUNGA TERMINAL"}
+    g = merge_aliases(pd.Series(["SANTAMARIA LATACUNGA TERMINAL CENTRO"] * 5 + sorted(hist)), keep=hist)
+    assert all(g[k] == k for k in hist) and g["SANTAMARIA LATACUNGA TERMINAL CENTRO"] in hist
     assert date_of("TimePhoto_20240410_091922.jpg") == "2024-04-10"
     assert date_of("WhatsApp Image 2025-03-02 at 10.11.12 (1).jpeg") == "2025-03-02"
     assert date_of("1712745562000.jpg") == "2024-04-10"

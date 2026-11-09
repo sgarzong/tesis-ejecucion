@@ -137,7 +137,8 @@ def muebles(model, pre, x, y):
     p = pd.DataFrame(clf.predict_proba(x_f), columns=clf.classes_)
     top = p.columns.to_numpy()[np.argsort(-p.to_numpy(), axis=1)]
     f["brillo"] = np.round(bright, 1)
-    f["label"] = np.where(f.brillo < DARK_MEAN, "captura_invalida", f.nombre.map(CLASE_DECLARADA).fillna("contenido_ajeno"))
+    f["declarada"] = f.nombre.map(CLASE_DECLARADA).fillna("contenido_ajeno")  # la verificación (sección 5.9)
+    f["label"] = np.where(f.brillo < DARK_MEAN, "captura_invalida", f.declarada)
     f["clip_pred"] = top[:, 0]
     f["conf"] = [round(p.at[i, c], 3) if c in p else .5 for i, c in enumerate(f.label)]
     f["top2"] = np.where(top[:, 0] != f.label, top[:, 0], top[:, 1])  # la alternativa que muestra la GUI
