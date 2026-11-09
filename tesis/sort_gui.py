@@ -55,6 +55,11 @@ def place(out, path, old, label):
         shutil.copy2(path, out / label / copy_name(path))
 
 
+def alternative(r):
+    """2ª opción del modelo como clase: nombre del ResNet-18 (prelabel) o ya una clase (odk_candidatas)."""
+    return TO_TESIS.get(r["top2"]) or (r["top2"] if r["top2"] in CLASSES else None)
+
+
 def paginate(rows, n):
     """Páginas de hasta n filas que nunca mezclan clases sugeridas (rows ya ordenadas por label)."""
     pages = []
@@ -210,7 +215,7 @@ class App:
             text, color = f"→ {CLASSES.index(label) + 1} {label}", COLOR[label]
         else:
             text, color = ("✓ " if p in self.decided and p not in self.edit else "") + f"{conf:.0%}", NEUTRAL
-            alt = TO_TESIS.get(r["top2"])
+            alt = alternative(r)
             if conf < BUCKETS[1] and alt and alt != label:
                 text += f" · a: {alt}?"
         frame = SELECTED if k in self.sel else color
@@ -258,7 +263,7 @@ class App:
         self.apply(lambda r: label)
 
     def second(self):
-        self.apply(lambda r: TO_TESIS.get(r["top2"]))
+        self.apply(alternative)
 
     def revert(self):
         self.apply(lambda r: self.sugg[r["path"]])

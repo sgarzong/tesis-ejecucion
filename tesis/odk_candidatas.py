@@ -12,6 +12,15 @@ SOS). Es independiente de los modelos de la tesis, así no sesga las etiquetas q
 contenido ajeno con confianza = 1 - P(mueble): en la GUI las claras van primero y las que parecen mueble al final.
 Alcance (sección 2.2): solo cadenas de autoservicio; fuera farmacias, estaciones de servicio y Plan Ninja
 (autoservicios independientes). Una foto oscura se sugiere como captura inválida.
+
+Los formularios de muebles (acuerdos comerciales, extravisibilidad y muebles alquilados) traen el mueble declarado
+de cada foto: esa es la sugerencia, llevada a la taxonomía con la tabla de la sección 2.2, y se revisa aparte:
+
+    python -m tesis.sort_gui data/odk/muebles.csv data/clasificadas_odk_muebles
+
+Ahí CLIP (6 clases: los 5 muebles y contenido ajeno) solo ordena: dentro de cada clase, las fotos que no se parecen
+a lo declarado van al final con su alternativa ("a: ...?"). Son justo los errores de campo que el modelo debe atrapar.
+Fuera: fotos de daño (un detalle, no el mueble) y locales que no son de las cadenas del canal moderno.
 """
 import csv
 from pathlib import Path
@@ -31,6 +40,23 @@ FORMS = ("promociones_mercaderista", "sos_participacion_percha_moderno")
 OUT_OF_SCOPE = ("Fybeca", "Difare", "Medicity", "Atimasa")  # farmacias y estaciones de servicio
 MUEBLES = ["chiclera", "lateral", "check_out", "cabecera", "exhibidor_piso"]
 PER_CLASS, DARK_MEAN = 400, 40
+MUEBLE_FORMS = ("acuerdos_comerciales", "extravisibilidad_ganados_moderno", "seguimiento_muebles_alquilados_uiux_v4")
+CADENAS = r"\bt[ií]a\b|favorita|rosado|santa ?mar[ií]a|coral|liris"  # canal moderno (sección 2.2)
+# Mueble declarado -> clase. Tabla de la sección 2.2 (RUMA = exhibidor de piso), más las nomenclaturas de acuerdos
+# comerciales y extravisibilidad: arete, mueble gris, four way y biombo son exhibidores de piso. Lo que no está aquí
+# (percha, OTA, exhibidor de counter, ganchera, mueble de frutas y verduras) no es de la taxonomía: contenido ajeno,
+# como GANCHERA en config.TO_TESIS, y el revisor decide.
+CLASE_DECLARADA = {
+    **dict.fromkeys(["CHICLERA", "CHICLERAS"], "chiclera"),
+    **dict.fromkeys(["LATERAL SIMPLE", "LATEAL SIMPLE", "LATERAL DOBLE", "LATERAL DE CABECERA",
+                     "CHECK OUT LATERAL DOBLE"], "lateral"),
+    **dict.fromkeys(["CHECK OUT", "CHECK OUT SIMPLE", "CAJA"], "check_out"),
+    **dict.fromkeys(["CABECERA", "CABECERA FRONTAL", "CABECERA SECA", "CABECERA FASTLINE", "MUEBLE GRIS/CABECERA",
+                     "BANDEJA DE CABECERA"], "cabecera"),
+    **dict.fromkeys(["EXHIBIDOR DE PISO", "RUMA", "RUMAS", "RUMA COMPARTIDA", "MEDIA RUMA", "FOUR WAY", "FOUR WAYS",
+                     "ARETE", "MUEBLE GRIS", "MUBLE GRIS", "MUEBLE GRIS COMPARTIDO", "BIOMBO", "BANDEJA DE BIOMBO"],
+                    "exhibidor_piso"),
+}
 
 
 def embed(model, pre, paths, cache):
@@ -92,6 +118,35 @@ def main():
     print(f"{len(d)} fotos · parecen mueble (P >= 0.5): {(d.p_mueble >= .5).sum()} · oscuras: "
           f"{(d.label == 'captura_invalida').sum()}")
     print(d.groupby("form").agg(fotos=("path", "size"), parecen_mueble=("p_mueble", lambda s: (s >= .5).sum())).to_string())
+    muebles(model, pre, np.concatenate([x_ref, x_odk[sos]]),
+            np.concatenate([ref.label, np.full(sos.sum(), "contenido_ajeno")]))
+
+
+def muebles(model, pre, x, y):
+    """data/odk/muebles.csv: fotos de los formularios de muebles, sugeridas como el mueble declarado."""
+    f = pd.concat([pd.read_csv(ODK / form / "fotos.csv") for form in MUEBLE_FORMS], ignore_index=True)
+    f = f[f.cadena.fillna("").str.contains(CADENAS, case=False) & ~f.campo.str.endswith("danio_foto")]
+    f = f.reset_index(drop=True)
+    # Muebles alquilados: "TIPO | VARIANTE | NEGOCIO | ...". El tipo es lo que muestra la foto: "CHECK OUT | LATERAL
+    # SIMPLE" es el exhibidor de la caja (así lo etiquetaron las fotos históricas), no el lateral de cabecera.
+    f["nombre"] = f.declarado.fillna("").str.split("|").str[0].str.strip().str.upper()
+
+    clf = LogisticRegression(C=1.0, max_iter=2000, class_weight="balanced").fit(x, y)
+    x_f, bright = embed(model, pre, f.path.tolist(), ODK / "clip_muebles.npy")
+    p = pd.DataFrame(clf.predict_proba(x_f), columns=clf.classes_)
+    top = p.columns.to_numpy()[np.argsort(-p.to_numpy(), axis=1)]
+    f["brillo"] = np.round(bright, 1)
+    f["label"] = np.where(f.brillo < DARK_MEAN, "captura_invalida", f.nombre.map(CLASE_DECLARADA).fillna("contenido_ajeno"))
+    f["clip_pred"] = top[:, 0]
+    f["conf"] = [round(p.at[i, c], 3) if c in p else .5 for i, c in enumerate(f.label)]
+    f["top2"] = np.where(top[:, 0] != f.label, top[:, 0], top[:, 1])  # la alternativa que muestra la GUI
+    f["top2_conf"] = [round(p.at[i, c], 3) for i, c in enumerate(f.top2)]
+    f.to_csv(ODK / "muebles_detalle.csv", index=False)
+    f.assign(model_class="ODK: " + f.nombre)[["path", "label", "model_class", "conf", "top2", "top2_conf"]].to_csv(
+        ODK / "muebles.csv", index=False)
+    print(f"\nformularios de muebles: {len(f)} fotos de {f.local.nunique()} locales · CLIP coincide con lo declarado en "
+          f"{(f.clip_pred == f.label).mean():.0%}")
+    print(pd.crosstab(f.label, f.form, margins=True).to_string())
 
 
 if __name__ == "__main__":

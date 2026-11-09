@@ -42,7 +42,7 @@ orden, y cada paso es reproducible:
 | 4 | `tesis.degrade` | Capturas inválidas sintéticas (física de sensor y lente, superposición restaurada), filtradas por identificabilidad |
 | 5 | `tesis.split` | Partición 70/10/20 agrupada por local, estable al llegar datos nuevos (`data/stores_split.csv`, respaldarlo) |
 | 6 | `tesis.export` | Fotos derechas (EXIF aplicado) a 320 px y el paquete para Colab |
-| — | `tesis.odk_fotos`, `tesis.odk_candidatas` | Fotos de ODK Central (SOS y Promociones) como contenido ajeno, ordenadas para revisarlas |
+| — | `tesis.odk_fotos`, `tesis.odk_candidatas` | Fotos de ODK Central (sep–nov 2026) para revisarlas: SOS y Promociones como contenido ajeno; muebles alquilados, acuerdos comerciales y extravisibilidad sugeridas como el mueble declarado |
 
 `data/manifest.csv` tiene una fila por imagen: `path, label, store, date, source, verified`. `source` es `hist`
 (fotografía real) o `sint` (sintética); la prueba usa solo filas con `verified=1`.

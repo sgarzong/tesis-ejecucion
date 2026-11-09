@@ -1,21 +1,25 @@
 """Descarga de fotos de ODK Central (solo lectura): candidatas reales a capturas inválidas (sección 5.3).
 
     python -m tesis.odk_fotos promociones_mercaderista sos_participacion_percha_moderno sos_visibilidad_plan_ninja
+    python -m tesis.odk_fotos acuerdos_comerciales extravisibilidad_ganados_moderno
 
 Credenciales: ODK_URL, ODK_USER y ODK_PASSWORD del entorno o, si faltan, del .env del pipeline (ENV). No se
 copian a ningún lado. Salida: data/odk/<formulario>/<envío>/<foto> y data/odk/<formulario>/envios.json con los
-datos de cada envío y data/odk/<formulario>/fotos.csv con una fila por foto (campo, cadena, local, fecha), para
-saber qué muestra y ubicarla en la partición por local. Reanudable: lo ya bajado se salta, porque los adjuntos de
-Central no cambian.
+datos de cada envío y data/odk/<formulario>/fotos.csv con una fila por foto (campo, cadena, local, fecha y, en
+los formularios de muebles, el mueble declarado), para saber qué muestra y ubicarla en la partición por local.
+Reanudable: lo ya bajado se salta, porque los adjuntos de Central no cambian.
 """
 import json
 import os
+import re
 import sys
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pandas as pd
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 ENV = Path(r"C:\Users\sebas\Desktop\Nueva carpeta\Prueba\.env")
 OUT = Path("data/odk")
@@ -25,6 +29,16 @@ STORE_FIELDS = {  # formulario -> (campo de cadena, campo de local) en sus datos
     "promociones_mercaderista": ("grp_local/cadena_label", "grp_local/local_nombre"),
     "sos_participacion_percha_moderno": ("local_datos/cadena_grupo", "local_datos/local_nombre"),
     "sos_visibilidad_plan_ninja": ("datos_local/local_cadena", "datos_local/local_nombre"),
+    "acuerdos_comerciales": ("grp_local/cadena_label", "grp_local/local_nombre"),
+    "extravisibilidad_ganados_moderno": ("grp_local/cadena_nombre", "grp_local/local_nombre"),
+    "seguimiento_muebles_alquilados_uiux_v4": ("local_cadena", "local_label"),
+}
+DECLARED = {  # formulario -> mueble declarado de la foto (campo, fila, envío): lo que el modelo contrasta (sección 2.1)
+    "acuerdos_comerciales": lambda campo, fila, envio: envio.get(re.search(r"mueble_\d+", campo).group() + "_nombre"),
+    "extravisibilidad_ganados_moderno": lambda campo, fila, envio: fila.get("g_tipo_label") or fila.get("ent_tipo_label"),
+    # "CHECK OUT | LATERAL SIMPLE | MARS | ...": la segunda parte es la nomenclatura de la maestra de convenios
+    "seguimiento_muebles_alquilados_uiux_v4":
+        lambda campo, fila, envio: envio.get(re.search(r"item_\d+", campo).group() + "_label"),
 }
 
 
@@ -45,6 +59,8 @@ def session():
     r.raise_for_status()
     s = requests.Session()
     s.headers["Authorization"] = f"Bearer {r.json()['token']}"
+    for scheme in ("https://", "http://"):  # el servidor corta conexiones sueltas en descargas largas
+        s.mount(scheme, HTTPAdapter(max_retries=Retry(total=5, backoff_factor=2)))
     return base, s
 
 
@@ -96,9 +112,12 @@ def photo_table(base, s, form, data):
             for field, v in f.items():
                 if isinstance(v, str) and v.lower().endswith(IMG):
                     meta = sub[iid]
+                    declared = DECLARED.get(form, lambda *_: "")(field, f, meta)
                     rows.append({"path": (OUT / form / iid.replace("uuid:", "") / v).as_posix(), "form": form,
                                  "campo": f"{es.split('.')[-1]}:{field}", "cadena": meta.get(chain_f) or "",
-                                 "local": meta.get(store_f) or "", "fecha": meta.get("fecha") or ""})
+                                 "local": meta.get(store_f) or "",
+                                 "fecha": meta.get("fecha") or meta.get("fecha_hoy") or "",
+                                 "declarado": declared or ""})
     pd.DataFrame(rows).to_csv(OUT / form / "fotos.csv", index=False)
     print(f"  {len(rows)} fotos con su campo -> {OUT / form / 'fotos.csv'}")
 
