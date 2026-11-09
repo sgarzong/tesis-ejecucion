@@ -45,6 +45,7 @@ GENERIC = {"HIPERMARKET", "COMISARIATO", "FERRISARIATO", "SUPERMAXI", "SUPER", "
 HASHES = Path("data/hashes.csv")  # caché de dhash por foto
 ODK_REVIEWS = {Path("data/clasificadas_odk_muebles"): Path("data/odk/muebles_detalle.csv"),  # tesis.odk_candidatas
                Path("data/clasificadas_odk"): Path("data/odk/candidatas_detalle.csv")}
+SHELVES = Path("data/odk/candidatas_detalle.csv")  # SOS y Promociones: la percha regular, sin mueble
 # Cadena en ODK (razón social o nombre corto) -> cadena del histórico. Explícito: un mercaderista o un
 # autoservicio independiente puede llamarse Santamaría o Rosado. Liris (Del Portal) solo aparece en ODK.
 ODK_CHAINS = {r"^TIA$|ASOCIADAS TIA": "TIA", r"^FAVORITA$|CORPORACION FAVORITA": "FAVORITA",
@@ -145,12 +146,13 @@ def odk_store(cadena, local):
 
 
 def odk_rows():
-    """Fotos de ODK revisadas, con la clave de local sin unir todavía a los grupos del histórico."""
-    rows = []
+    """Fotos de ODK, con la clave de local sin unir todavía a los grupos del histórico."""
+    rows, reviewed = [], set()
     for src, detail in ODK_REVIEWS.items():
         if not (src / "revision.csv").exists():
             continue
         r = pd.read_csv(src / "revision.csv", encoding="utf-8-sig").drop_duplicates("path", keep="last")
+        reviewed |= set(r.path)
         d = r[r.label != DISCARD].merge(pd.read_csv(detail).drop(columns="label"), on="path")
         for x in d.to_dict("records"):
             store, copy = odk_store(x["cadena"], x["local"]), src / x["label"] / copy_name(x["path"])
@@ -159,6 +161,14 @@ def odk_rows():
                              "date": str(x["fecha"])[:10], "source": "odk", "verified": 1,
                              "declarado": x.get("declarada", ""),
                              "carpeta": f"ODK | {x['form']} | {x['cadena']} | {x['local']}"})
+    # SOS y Promociones sin revisar foto a foto: contenido ajeno (las negras, captura inválida, según
+    # tesis.odk_candidatas). verified=0: entrenan pero no van a la prueba. Si se revisan en la GUI, manda la revisión.
+    s = pd.read_csv(SHELVES) if SHELVES.exists() else pd.DataFrame(columns=["path"])
+    for x in s[~s.path.isin(reviewed)].to_dict("records"):
+        if store := odk_store(x["cadena"], x["local"]):
+            rows.append({"path": x["path"], "label": x["label"], "store": store, "date": str(x["fecha"])[:10],
+                         "source": "odk", "verified": 0, "declarado": "",
+                         "carpeta": f"ODK | {x['form']} | {x['cadena']} | {x['local']}"})
     return pd.DataFrame(rows)
 
 
