@@ -85,6 +85,18 @@ def near_duplicates(df, max_dist=4):
     return dup
 
 
+def cross_store_duplicates(df, test_stores=()):
+    """Marca las copias sobrantes de una misma foto archivada en más de un local (TIA 133 y TIA 546 comparten 16).
+    Requiere `hash` y que ya no haya cuasi-duplicados dentro de cada local. Queda la copia de un local que no es de
+    prueba, así la prueba no comparte fotos con el desarrollo. Solo hash idéntico: entre locales distintos, a
+    distancia 1–4 coinciden fotos diferentes (la etiqueta concuerda en menos de dos tercios de los pares, y ninguno
+    comparte nombre de archivo). Las capturas inválidas no se comparan: oscuras o planas, la huella queda en el logo y
+    la superposición, y fotos negras de días distintos coinciden. Hash 0: ilegible o plana."""
+    d = df[(df.hash != 0) & (df.label != "captura_invalida")]
+    order = d.store.isin(set(test_stores)).sort_values(kind="stable").index
+    return d.loc[order].duplicated("hash").reindex(df.index, fill_value=False)
+
+
 if __name__ == "__main__":
     manifest, out = Path(sys.argv[1]), Path(sys.argv[2])
     df = pd.read_csv(manifest)

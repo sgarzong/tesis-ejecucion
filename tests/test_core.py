@@ -10,8 +10,9 @@ from tesis.build_dataset import NO_STORE, date_of, merge_aliases, odk_store, sto
 from tesis.config import CLASSES
 from tesis.degrade import degrade, shake_psf
 from tesis.metrics import IDX, conditional_pred, failed_criteria, verification
+from tesis.metrics import contracts as contracts_from
 from tesis.sort_gui import DISCARD, copy_name, paginate, place
-from tesis.split import assign_stores, experiment
+from tesis.split import assign_stores, cross_store_duplicates, experiment
 
 
 def test_split_no_leak_and_stable():
@@ -35,6 +36,11 @@ def test_split_no_leak_and_stable():
         assert (p["test"].verified == 1).all()
     assert (p["test"].date >= "2025-10-01").all() and (p["train"].date < "2025-10-01").all()
 
+    # La misma foto en un local de prueba y en uno de entrenamiento: sale la de prueba. Negras y hash 0 no cuentan.
+    d = pd.DataFrame({"store": ["t", "e", "e2", "t", "e", "t", "e"], "hash": [7, 7, 7, 0, 0, 5, 5],
+                      "label": ["lateral"] * 5 + ["captura_invalida"] * 2})
+    assert list(cross_store_duplicates(d, ["t"])) == [True, False, True, False, False, False, False]
+
 
 def test_conditional_and_verification():
     contracts = {"a": {"chiclera", "lateral"}}
@@ -45,6 +51,10 @@ def test_conditional_and_verification():
     assert list(conditional_pred(probs, ["a", "a"], contracts)) == list(y)
     v = verification(probs, y, ["a", "a"], contracts)
     assert v == {"detection_rate": 1.0, "false_alarm": 0.0, "n_mismatch": 2, "n_correct": 2}
+    # Convenio aproximado: muebles vistos y declarados; los rechazos y lo no verificado no cuentan.
+    m = pd.DataFrame({"store": ["a", "a", "a", "b"], "label": ["chiclera", "contenido_ajeno", "lateral", "cabecera"],
+                      "declarado": [None, "check_out", None, None], "verified": [1, 1, 0, 1]})
+    assert contracts_from(m) == {"a": {"chiclera", "check_out"}, "b": {"cabecera"}}
 
 
 def test_failed_criteria():

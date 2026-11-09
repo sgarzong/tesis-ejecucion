@@ -10,6 +10,18 @@ from .config import CLASSES, REJECT, THRESHOLDS
 
 IDX = {c: i for i, c in enumerate(CLASSES)}
 REJECT_IDX = [IDX[c] for c in REJECT]
+MUEBLES = [c for c in CLASSES if c not in REJECT]
+
+
+def contracts(manifest):
+    """Muebles con convenio por local, a falta de la maestra de convenios: los que aparecen en las fotos verificadas
+    del local y los que ODK declara para él (el formulario solo despliega los contratados). Es un superconjunto del
+    convenio: restringe la predicción menos que la maestra, no más."""
+    out = {}
+    for s, label, declared in manifest[manifest.verified == 1][["store", "label", "declarado"]].itertuples(index=False):
+        for c in {label, declared} & set(MUEBLES):
+            out.setdefault(s, set()).add(c)
+    return out
 
 
 def conditional_pred(probs, stores, contracts):

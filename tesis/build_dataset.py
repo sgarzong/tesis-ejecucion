@@ -26,7 +26,7 @@ from pathlib import Path, PureWindowsPath
 import pandas as pd
 
 from .sort_gui import DISCARD, copy_name
-from .split import dhash, near_duplicates
+from .split import cross_store_duplicates, dhash, near_duplicates
 
 FOTOS = PureWindowsPath(r"C:\Users\sebas\Downloads\proyecto-20260627T133347Z-3-001\proyecto"
                         r"\clasificacion_ales\fotos")
@@ -43,6 +43,7 @@ PREFIX = {"MI", "TIA", "SMS", "CORAL"}  # 'MI COMISARIATO X' = 'COMISARIATO X', 
 GENERIC = {"HIPERMARKET", "COMISARIATO", "FERRISARIATO", "SUPERMAXI", "SUPER", "AKI", "MEGA", "GRAN", "CENTRO",
            "MALL", "PLAZA", "LA", "EL", "DE", "DEL", "LOS", "LAS", "Y"}
 HASHES = Path("data/hashes.csv")  # caché de dhash por foto
+STORES = Path("data/stores_split.csv")  # partición vigente (tesis.split)
 ODK_REVIEWS = {Path("data/clasificadas_odk_muebles"): Path("data/odk/muebles_detalle.csv"),  # tesis.odk_candidatas
                Path("data/clasificadas_odk"): Path("data/odk/candidatas_detalle.csv")}
 SHELVES = Path("data/odk/candidatas_detalle.csv")  # SOS y Promociones: la percha regular, sin mueble
@@ -230,14 +231,18 @@ def main(revision=Path("data/clasificadas/revision.csv")):
         m = pd.concat([m, o], ignore_index=True)
     # Sin local conocido no se puede garantizar que la foto no sea de un local de prueba: fuera.
     gone = m.store == NO_STORE
-    # Cuasi-duplicados (ráfagas del mismo mueble) dentro de cada local: queda la primera por fecha.
+    # Cuasi-duplicados (ráfagas del mismo mueble) dentro de cada local: queda la primera por fecha. Después, la
+    # misma foto archivada en dos locales: queda la copia que no es de prueba (sección 5.4).
     h = m[(m.source != "sint") & ~gone].sort_values(["store", "date", "path"])
     h["hash"] = pd.Series(dhashes(h.path), index=h.index, dtype=object)  # 64 bits: no cabe en int64
-    drop = m.index[gone].union(h.index[near_duplicates(h)])
+    near = near_duplicates(h)
+    split = pd.read_csv(STORES) if STORES.exists() else pd.DataFrame(columns=["store", "split"])
+    cross = cross_store_duplicates(h[~near], split.store[split.split == "test"])
+    drop = m.index[gone].union(h.index[near]).union(cross.index[cross])
     for p in m.path[drop]:
         if p.startswith(out.as_posix()):  # enlaces propios; las sintéticas de data/sinteticas no se borran
             Path(p).unlink()
-    print(f"fuera: sin local {gone.sum()} · cuasi-duplicados {len(drop) - gone.sum()}")
+    print(f"fuera: sin local {gone.sum()} · cuasi-duplicados {near.sum()} · misma foto en dos locales {cross.sum()}")
     m = m.drop(drop)
     # Auditoría de la agrupación: qué carpetas de origen quedaron en cada local.
     (m.assign(local_carpeta=m.carpeta.str.split(" \\| ").map(lambda p: p[3] if len(p) > 3 else ""))

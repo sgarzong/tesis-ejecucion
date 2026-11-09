@@ -28,7 +28,9 @@ Para correrlo en Google Colab:
 
 [`notebooks/entrenar_tesis.ipynb`](notebooks/entrenar_tesis.ipynb) hace el ajuste fino de punta a punta del protocolo
 de la tesis (3 arquitecturas, experimentos A y B, control sin máscara), la cuantización a TFLite int8 y la evaluación,
-y el experimento de cuantización para el teléfono (float16, int8 de rango dinámico, int8 con calibración balanceada).
+el experimento de cuantización para el teléfono (float16, int8 de rango dinámico, int8 con calibración balanceada) y
+el análisis según la planificación: tabla 5.7 con las falsas alarmas, verificación contra convenio (pares por
+intercambio y sumisiones reales de ODK), exactitud condicionada al local, hipótesis 5.8 y errores por cadena.
 
 ## Datos
 
@@ -39,7 +41,7 @@ orden, y cada paso es reproducible:
 |---|---|---|
 | 1 | `tesis.prelabel` | Sugiere una clase a cada una de las 64 292 fotos históricas con un ResNet-18 previo |
 | 2 | `tesis.sort_gui` | Revisión manual por páginas (clic o arrastre para seleccionar, tecla o botón para asignar) |
-| 3 | `tesis.build_dataset` | Manifiesto con local, fecha y fuente; une variantes del nombre de un mismo local; quita fotos sin local y cuasi-duplicados |
+| 3 | `tesis.build_dataset` | Manifiesto con local, fecha y fuente; une variantes del nombre de un mismo local; quita fotos sin local, cuasi-duplicados dentro del local y la misma foto archivada en dos locales (queda la copia que no es de prueba) |
 | 4 | `tesis.degrade` | Capturas inválidas sintéticas (física de sensor y lente, superposición restaurada), filtradas por identificabilidad |
 | 5 | `tesis.split` | Partición 70/10/20 agrupada por local, estable al llegar datos nuevos (`data/stores_split.csv`, respaldarlo) |
 | 6 | `tesis.export` | Fotos derechas (EXIF aplicado) a 320 px y el paquete para Colab |
@@ -58,6 +60,38 @@ conservan su partición.
   777 fotos): su última línea es el nombre del local, que delata la clase vía el convenio.
 - **El 84 % de las fotos viene acostada** con una etiqueta EXIF que TensorFlow ignora; `tesis.export` las endereza.
 - **Las capturas inválidas sintéticas heredan el local de su origen** (sin fuga) y nunca entran a la prueba.
+
+## Respecto de la planificación
+
+[`planificacion_titulacion_reconocimiento_pos_v4.md`](planificacion_titulacion_reconocimiento_pos_v4.md) es el
+protocolo. Se sigue en la taxonomía de 7 clases, la partición agrupada por local (las fotos de ODK conservan la
+asignación de su local), los experimentos A y B, la prueba solo con fotos verificadas, las tres arquitecturas con
+protocolo común, el int8 con calibración, la máscara con su control sin máscara, y las métricas y umbrales de la tabla
+5.7 (`tesis/config.py`). Desviaciones que la memoria debe declarar:
+
+- **Etiquetado (5.3, objetivo 1).** Revisión manual foto a foto en lugar de etiquetas débiles de la maestra de
+  convenios con una estimación de su ruido; sin reconocimiento óptico de la superposición ni reconstrucción de la
+  visita. Las 4 198 fotos de SOS y Promociones de ODK entrenan sin revisión (`verified=0`, fuera de la prueba), contra
+  la verificación previa que pide 5.1.
+- **Taxonomía (2.2).** ARETE → `lateral`; CHECK OUT | LATERAL → `check_out`; MUEBLE GRIS, FOUR WAY y BIOMBO →
+  `exhibidor_piso`; OTA y counter de las cadenas modernas → `contenido_ajeno`, en lugar de dejarlos fuera de alcance.
+- **Convenios (5.6, 5.9).** Sin la maestra en el proyecto, el convenio de cada local se aproxima con los muebles de sus
+  fotos verificadas y los declarados en ODK (`tesis.metrics.contracts`). Es un superconjunto, así que las falsas
+  alarmas y la exactitud condicionada son conservadoras.
+- **Deduplicación (5.4).** Cuasi-duplicados dentro del local (dhash ≤ 4) en lugar de la visita reconstruida. Entre
+  locales, solo la misma foto (hash idéntico): se agregó al encontrar 92 fotos de prueba repetidas en otro local, 88 de
+  ellas en desarrollo. Los runs ya entrenados las excluyen al evaluar.
+- **Aumentos (5.5).** El cambio de perspectiva se aproxima con zoom y traslación.
+- **Máscara (5.5).** Cubre 0.70 × 0.33 ≈ 23 % de la imagen.
+- **Tope por local.** `MAX_PER_STORE = 300` no se calibró.
+- **Cuantización (5.5).** Además del int8 obligatorio, float16, int8 de rango dinámico e int8 con calibración
+  balanceada.
+- **Verificación (5.9).** ODK ya acumula errores reales de campo, así que la validación con discrepancias reales, que
+  la planificación dejaba como trabajo futuro, se adelantó.
+
+Pendiente: latencia, memoria y aumento del paquete en el Honor X6b (A7), de los que dependen la viabilidad, la
+selección lexicográfica y el frente de Pareto; el prototipo Android (A8); y capturas inválidas reales en la prueba:
+tiene dos, así que su recall solo vale 0, 0.5 o 1 y el criterio de rechazo se decide con dos fotos.
 
 ## Estructura
 
