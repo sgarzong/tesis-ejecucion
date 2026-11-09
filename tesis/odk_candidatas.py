@@ -43,18 +43,19 @@ PER_CLASS, DARK_MEAN = 400, 40
 MUEBLE_FORMS = ("acuerdos_comerciales", "extravisibilidad_ganados_moderno", "seguimiento_muebles_alquilados_uiux_v4")
 CADENAS = r"\bt[ií]a\b|favorita|rosado|santa ?mar[ií]a|coral|liris"  # canal moderno (sección 2.2)
 # Mueble declarado -> clase. Tabla de la sección 2.2 (RUMA = exhibidor de piso), más las nomenclaturas de acuerdos
-# comerciales y extravisibilidad: arete, mueble gris, four way y biombo son exhibidores de piso. Lo que no está aquí
+# comerciales y extravisibilidad: el arete es un lateral de cabecera; mueble gris, four way y biombo son exhibidores
+# de piso. Lo que no está aquí
 # (percha, OTA, exhibidor de counter, ganchera, mueble de frutas y verduras) no es de la taxonomía: contenido ajeno,
 # como GANCHERA en config.TO_TESIS, y el revisor decide.
 CLASE_DECLARADA = {
     **dict.fromkeys(["CHICLERA", "CHICLERAS"], "chiclera"),
     **dict.fromkeys(["LATERAL SIMPLE", "LATEAL SIMPLE", "LATERAL DOBLE", "LATERAL DE CABECERA",
-                     "CHECK OUT LATERAL DOBLE"], "lateral"),
+                     "CHECK OUT LATERAL DOBLE", "ARETE"], "lateral"),
     **dict.fromkeys(["CHECK OUT", "CHECK OUT SIMPLE", "CAJA"], "check_out"),
     **dict.fromkeys(["CABECERA", "CABECERA FRONTAL", "CABECERA SECA", "CABECERA FASTLINE", "MUEBLE GRIS/CABECERA",
                      "BANDEJA DE CABECERA"], "cabecera"),
     **dict.fromkeys(["EXHIBIDOR DE PISO", "RUMA", "RUMAS", "RUMA COMPARTIDA", "MEDIA RUMA", "FOUR WAY", "FOUR WAYS",
-                     "ARETE", "MUEBLE GRIS", "MUBLE GRIS", "MUEBLE GRIS COMPARTIDO", "BIOMBO", "BANDEJA DE BIOMBO"],
+                     "MUEBLE GRIS", "MUBLE GRIS", "MUEBLE GRIS COMPARTIDO", "BIOMBO", "BANDEJA DE BIOMBO"],
                     "exhibidor_piso"),
 }
 
