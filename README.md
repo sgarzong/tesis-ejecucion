@@ -45,7 +45,7 @@ orden, y cada paso es reproducible:
 | 4 | `tesis.degrade` | Capturas inválidas sintéticas (física de sensor y lente, superposición restaurada), filtradas por identificabilidad |
 | 5 | `tesis.split` | Partición 70/10/20 agrupada por local, estable al llegar datos nuevos (`data/stores_split.csv`, respaldarlo) |
 | 6 | `tesis.export` | Fotos derechas (EXIF aplicado) a 320 px y el paquete para Colab |
-| — | `tesis.odk_fotos`, `tesis.odk_candidatas` | Fotos de ODK Central (sep–nov 2026) para revisarlas: SOS y Promociones como contenido ajeno; muebles alquilados, acuerdos comerciales y extravisibilidad sugeridas como el mueble declarado |
+| — | `tesis.odk_fotos`, `tesis.odk_candidatas` | Fotos de ODK Central (sep–nov 2026) para revisarlas: SOS y Promociones como contenido ajeno; muebles alquilados, acuerdos comerciales y extravisibilidad sugeridas como el mueble declarado; *Fotos mal tomadas*, sin local en el formulario (se lee de la superposición) |
 
 `data/manifest.csv` tiene una fila por imagen: `path, label, store, date, source, verified, declarado`. `source` es
 `hist` (fotografía histórica), `odk` (ODK Collect, sep–nov 2026, con el mueble `declarado` en el formulario) o `sint`
@@ -89,9 +89,14 @@ protocolo común, el int8 con calibración, la máscara con su control sin másc
 - **Verificación (5.9).** ODK ya acumula errores reales de campo, así que la validación con discrepancias reales, que
   la planificación dejaba como trabajo futuro, se adelantó.
 
+- **Capturas inválidas reales (5.3).** La prueba A tiene 18: dos de la revisión y 16 fotos oscuras de ODK de locales
+  de prueba, aprobadas después de entrenar (`entrenar_tesis` las predice con cada run y las suma). Las 14 del
+  formulario *Fotos mal tomadas* (7 capturas inválidas y 7 de contenido ajeno según 2.2; dos más, de farmacias, quedan
+  fuera de alcance) son de locales de entrenamiento: entrenan en el próximo reentrenamiento y, mientras, sirven de
+  comprobación de campo.
+
 Pendiente: latencia, memoria y aumento del paquete en el Honor X6b (A7), de los que dependen la viabilidad, la
-selección lexicográfica y el frente de Pareto; el prototipo Android (A8); y capturas inválidas reales en la prueba:
-tiene dos, así que su recall solo vale 0, 0.5 o 1 y el criterio de rechazo se decide con dos fotos.
+selección lexicográfica y el frente de Pareto; y el prototipo Android (A8).
 
 ## Estructura
 

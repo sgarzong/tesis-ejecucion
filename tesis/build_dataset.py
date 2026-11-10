@@ -45,7 +45,9 @@ GENERIC = {"HIPERMARKET", "COMISARIATO", "FERRISARIATO", "SUPERMAXI", "SUPER", "
 HASHES = Path("data/hashes.csv")  # caché de dhash por foto
 STORES = Path("data/stores_split.csv")  # partición vigente (tesis.split)
 ODK_REVIEWS = {Path("data/clasificadas_odk_muebles"): Path("data/odk/muebles_detalle.csv"),  # tesis.odk_candidatas
-               Path("data/clasificadas_odk"): Path("data/odk/candidatas_detalle.csv")}
+               Path("data/clasificadas_odk"): Path("data/odk/candidatas_detalle.csv"),
+               # Fotos mal tomadas: el formulario no pide local; cadena y local se leen de la superposición de cada foto
+               Path("data/clasificadas_odk_mal_tomadas"): Path("data/odk/mal_tomadas_detalle.csv")}
 SHELVES = Path("data/odk/candidatas_detalle.csv")  # SOS y Promociones: la percha regular, sin mueble
 # Cadena en ODK (razón social o nombre corto) -> cadena del histórico. Explícito: un mercaderista o un
 # autoservicio independiente puede llamarse Santamaría o Rosado. Liris (Del Portal) solo aparece en ODK.

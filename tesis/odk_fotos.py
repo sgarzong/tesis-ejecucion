@@ -32,6 +32,7 @@ STORE_FIELDS = {  # formulario -> (campo de cadena, campo de local) en sus datos
     "acuerdos_comerciales": ("grp_local/cadena_label", "grp_local/local_nombre"),
     "extravisibilidad_ganados_moderno": ("grp_local/cadena_nombre", "grp_local/local_nombre"),
     "seguimiento_muebles_alquilados_uiux_v4": ("local_cadena", "local_label"),
+    "fotos_mal_tomadas": (None, None),  # capturas inválidas reales a propósito (sorteo): el formulario no pide local
 }
 DECLARED = {  # formulario -> mueble declarado de la foto (campo, fila, envío): lo que el modelo contrasta (sección 2.1)
     "acuerdos_comerciales": lambda campo, fila, envio: envio.get(re.search(r"mueble_\d+", campo).group() + "_nombre"),
