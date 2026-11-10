@@ -105,8 +105,9 @@ protocolo común, el int8 con calibración, la máscara con su control sin másc
   de 30 corre en un proceso nuevo y la herramienta da el p95 por ráfaga: se reporta el mayor de las cuatro, que acota
   por arriba el de las 120 ejecuciones.
 
-Pendiente: correr `tesis.device` en el Honor X6b (A7), de lo que dependen la viabilidad, la selección lexicográfica y
-el frente de Pareto; y el prototipo Android (A8), con la latencia de extremo a extremo y el aumento del paquete.
+Medido en el Honor X6b (A7, `runs_odk/dispositivo.csv`): todas las configuraciones cumplen la latencia y la memoria
+(p95 ≤ 246 ms, ≤ 219 MB), así que la viabilidad depende del recall de rechazo, que ninguna alcanza todavía.
+Pendiente: el prototipo Android (A8), con la latencia de extremo a extremo y el aumento del paquete.
 
 ## Estructura
 
