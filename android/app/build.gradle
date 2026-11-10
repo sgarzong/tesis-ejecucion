@@ -18,7 +18,9 @@ android {
         // porque es un prototipo que se instala por USB.
         release { signingConfig signingConfigs.debug }
     }
-    androidResources { noCompress 'tflite' }  // el modelo se mapea a memoria desde el paquete
+    // Sin modelo, device.py --app lo deja en el teléfono. Para llevarlo dentro del paquete: src/main/assets/modelo.tflite,
+    // sin comprimir para mapearlo a memoria.
+    androidResources { noCompress 'tflite' }
     lint { checkReleaseBuilds false }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
@@ -28,12 +30,4 @@ android {
 
 dependencies {
     implementation 'com.google.ai.edge.litert:litert:1.4.0'
-}
-
-tasks.named('preBuild') {
-    doFirst {
-        if (!file('src/main/assets/modelo.tflite').exists())
-            throw new GradleException('Falta app/src/main/assets/modelo.tflite: copia ahí el formato que va al teléfono, ' +
-                    'p. ej. runs_odk/A_mobilenetv3/model_fp16.tflite')
-    }
 }

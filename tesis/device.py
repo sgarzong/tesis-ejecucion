@@ -22,13 +22,15 @@ Mide solo la inferencia, con entrada aleatoria y XNNPACK en la CPU. Escribe <car
 <carpeta>/dispositivo.csv: este último se sube a runs_odk en Drive y entrenar_tesis lo lleva a la tabla 5.7.
 
 De extremo a extremo, con el prototipo (A8, android/):
-    python device.py modelos --app app-release.apk --fotos fotos_app
-Instala el APK y repite el protocolo con fotos reales en lugar de entrada aleatoria: cada ráfaga, en un proceso nuevo
-del prototipo (Rafaga.java), lee N fotos de disco, las endereza y reduce como el entrenamiento y las clasifica. El p95
-de cada ráfaga es el de rango más cercano (en 30, solo la más lenta lo supera) y la memoria, el pico del proceso de la
-app (VmHWM). Escribe app_rafagas.csv, app_fotos.csv (tiempos y probabilidades por foto, para tesis.fotos_app) y
-dispositivo_app.csv, con el preprocesamiento, el tamaño del modelo y del runtime en el paquete y el del APK de ODK
-Collect instalado. Las fotos se borran del teléfono al terminar.
+    python device.py modelos --app verificador.apk --fotos fotos_app      [--modelo A_mobilenetv3/model_fp16]
+    python device.py modelos --app verificador.apk                        solo lo instala, con el modelo
+Instala el APK, le deja el modelo en el teléfono y repite el protocolo con fotos reales en lugar de entrada aleatoria:
+cada ráfaga, en un proceso nuevo del prototipo (Rafaga.java), lee N fotos de disco, las endereza y reduce como el
+entrenamiento y las clasifica. El p95 de cada ráfaga es el de rango más cercano (en 30, solo la más lenta lo supera)
+y la memoria, el pico del proceso de la app (VmHWM). Escribe en <carpeta>, con el nombre de la carpeta de fotos:
+fotos_app_dispositivo.csv (con el preprocesamiento, el modelo y el runtime en el paquete, el APK sin modelo y el de
+ODK Collect instalado), fotos_app_rafagas.csv y fotos_app_por_foto.csv (tiempos y probabilidades, para
+tesis.fotos_app). Las fotos se borran del teléfono al terminar; el modelo se queda.
 """
 import argparse
 import csv
@@ -147,17 +149,22 @@ def formato(m):  # la fila float32 de entrenar_tesis se evalúa con model.keras;
 
 
 def medir_app(a, telefono, modelos):
+    m = Path(a.modelo) if a.modelo.endswith(".tflite") else next(
+        (m for m in modelos if f"{m.parent.name}/{m.stem}" == a.modelo), None)
+    if m is None or not m.exists():
+        sys.exit(f"No encuentro el modelo {a.modelo} dentro de {a.carpeta}")
+    run, fmt = m.parent.name, formato(m)
     with zipfile.ZipFile(a.app) as z:
-        modelo = z.read("assets/modelo.tflite")
         runtime = sum(i.compress_size for i in z.infolist() if i.filename.startswith("lib/"))
-    run, fmt = next(((m.parent.name, formato(m)) for m in modelos
-                     if m.stat().st_size == len(modelo) and m.read_bytes() == modelo), ("?", "?"))
-    fotos = sorted(f for f in a.fotos.iterdir() if f.suffix.lower() in (".jpg", ".jpeg"))
-    if not fotos:
-        sys.exit(f"No hay fotos .jpg en {a.fotos}")
     adb("install", "-r", str(a.app))
     remoto = f"/sdcard/Android/data/{PAQUETE}/files"
     rafaga_app(remoto, 0, 0, a.hilos)  # sin fotos no mide nada, pero crea la carpeta de la app
+    adb("push", str(m), f"{remoto}/modelo.tflite")  # se queda: la app sirve después, sola o desde ODK
+    if not a.fotos:
+        return print(f"{telefono}: prototipo instalado con {run}/{fmt}")
+    fotos = sorted(f for f in a.fotos.iterdir() if f.suffix.lower() in (".jpg", ".jpeg"))
+    if not fotos:
+        sys.exit(f"No hay fotos .jpg en {a.fotos}")
     adb("shell", "rm", "-rf", f"{remoto}/fotos")
     adb("shell", "mkdir", "-p", f"{remoto}/fotos")
     for f in fotos:
@@ -181,17 +188,20 @@ def medir_app(a, telefono, modelos):
     odk_b = sum(int(adb("shell", "stat", "-c", "%s", p[len("package:"):]).stdout)  # base y divisiones del APK
                 for p in adb("shell", "pm", "path", ODK, check=False).stdout.split())
     [res] = resumen(filas)
-    res.update({"preproc_ms": statistics.median(float(f["leer_ms"]) + float(f["reducir_ms"]) for f in por_foto),
-                "modelo_mb": len(modelo) / 2**20, "runtime_mb": runtime / 2**20,
+    res.update({"fotos": a.fotos.resolve().name, "n_fotos": len(fotos),
+                "preproc_ms": statistics.median(float(f["leer_ms"]) + float(f["reducir_ms"]) for f in por_foto),
+                "modelo_mb": m.stat().st_size / 2**20, "runtime_mb": runtime / 2**20,
                 "apk_mb": a.app.stat().st_size / 2**20, "odk_apk_mb": odk_b / 2**20})
-    escribir(filas, a.carpeta / "app_rafagas.csv")
-    escribir(por_foto, a.carpeta / "app_fotos.csv")
-    escribir([res], a.carpeta / "dispositivo_app.csv")
+    pre = a.carpeta / a.fotos.resolve().name  # otra carpeta de fotos, otros archivos
+    salidas = [Path(f"{pre}_{s}.csv") for s in ("dispositivo", "rafagas", "por_foto")]
+    for filas_, ruta in zip(([res], filas, por_foto), salidas):
+        escribir(filas_, ruta)
     print(f"\n{run}/{fmt} de extremo a extremo: p50 {res['lat_p50_ms']:.0f} ms, p95 {res['lat_p95_ms']:.0f} ms "
           f"(preprocesamiento {res['preproc_ms']:.0f} ms), {res['mem_mb']:.0f} MB. Paquete: modelo "
           f"{res['modelo_mb']:.1f} MB + runtime {res['runtime_mb']:.1f} MB"
-          + (f" = {(len(modelo) + runtime) / odk_b:.0%} del APK de ODK Collect ({res['odk_apk_mb']:.0f} MB)" if odk_b else ""))
-    print(f"Sube {a.carpeta / 'dispositivo_app.csv'} y app_fotos.csv a MyDrive/tesis/runs_odk.")
+          + (f" = {(m.stat().st_size + runtime) / odk_b:.0%} del APK de ODK Collect ({res['odk_apk_mb']:.0f} MB)"
+             if odk_b else ""))
+    print("Sube a MyDrive/tesis/runs_odk: " + ", ".join(str(s) for s in salidas))
 
 
 def resumen(raf):
@@ -223,10 +233,12 @@ def main():
     ap.add_argument("--hilos", type=int, default=4)
     ap.add_argument("--pausa", type=float, default=15, help="segundos entre ráfagas")
     ap.add_argument("--app", type=Path, help="APK del prototipo: de extremo a extremo, en lugar de benchmark_model")
-    ap.add_argument("--fotos", type=Path, help="con --app: carpeta de fotos .jpg (python -m tesis.fotos_app)")
+    ap.add_argument("--fotos", type=Path, help="con --app: carpeta de fotos .jpg; sin ella, solo instala")
+    ap.add_argument("--modelo", default="A_mobilenetv3/model_fp16", help="con --app: run/formato dentro de la carpeta "
+                    "o la ruta de un .tflite")
     a = ap.parse_args()
-    if a.app and not a.fotos:
-        ap.error("--app necesita --fotos")
+    if not a.carpeta.is_dir():
+        sys.exit(f"No existe la carpeta {a.carpeta}")
     # A cualquier nivel: descomprimir el zip de Drive suele dejar una carpeta de más.
     modelos = sorted(m for m in a.carpeta.rglob("*.tflite") if m.parent.name.startswith("A_"))
     if not modelos and not a.app:  # con --app solo sirven para saber qué formato lleva el APK

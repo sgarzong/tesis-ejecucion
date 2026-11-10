@@ -54,20 +54,23 @@ comas, restringe la decisión a los muebles del local; `camara`, opcional, fija 
 (`'com.jeyluta.timestampcamerafree'`).
 
 ```powershell
-copy <run>\model_fp16.tflite android\app\src\main\assets\modelo.tflite     # el formato que va al teléfono
 $env:JAVA_HOME = "$env:LOCALAPPDATA\Android\jdk17"; $env:ANDROID_HOME = "$env:LOCALAPPDATA\Android\Sdk"
 android\gradlew.bat -p android assembleRelease        # android\app\build\outputs\apk\release\app-release.apk
 ```
 
-Necesita JDK 17 y el SDK de Android (plataforma 35, build-tools 34). La latencia de extremo a extremo se mide con el
-mismo protocolo de ráfagas, sobre 120 fotos reales de ODK de locales de prueba, y se comprueba que el teléfono
-clasifica igual que la evaluación:
+Necesita JDK 17 y el SDK de Android (plataforma 35, build-tools 34). El APK no lleva el modelo: `tesis.device --app`
+lo instala y le deja el `.tflite` en el teléfono (para llevarlo dentro del paquete, `app/src/main/assets/modelo.tflite`).
+La latencia de extremo a extremo se mide con el mismo protocolo de ráfagas, sobre 120 fotos reales de ODK de locales
+de prueba, y se comprueba que el teléfono clasifica igual que la evaluación:
 
 ```powershell
 python -m tesis.fotos_app                                                          # data/fotos_app/
 python -m tesis.device runs/odk --app android\app\build\outputs\apk\release\app-release.apk --fotos data/fotos_app
-python -m tesis.fotos_app runs/odk/A_mobilenetv3/model_fp16.tflite runs/odk/app_fotos.csv    # paridad
+python -m tesis.fotos_app runs/odk/A_mobilenetv3/model_fp16.tflite runs/odk/fotos_app_por_foto.csv    # paridad
 ```
+
+En otro computador basta el paquete que arma `python -m tesis.fotos_app --paquete` (el APK, `device.py`, las fotos y
+un LEEME), con Python y el teléfono.
 
 ## Datos
 

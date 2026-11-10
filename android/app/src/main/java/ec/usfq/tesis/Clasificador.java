@@ -11,11 +11,13 @@ import org.tensorflow.lite.Interpreter;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.HashMap;
 import java.util.Locale;
@@ -40,12 +42,21 @@ final class Clasificador implements AutoCloseable {
     private final ByteBuffer entrada = ByteBuffer.allocateDirect(LADO * LADO * 3 * 4).order(ByteOrder.nativeOrder());
     private final float[][] salida = new float[1][CLASES.length];
 
+    /** El modelo que deja device.py --app en files/modelo.tflite o, si no, el que va dentro del paquete (assets). */
     Clasificador(Context c, int hilos) throws IOException {
-        try (AssetFileDescriptor fd = c.getAssets().openFd("modelo.tflite");
-             FileInputStream in = new FileInputStream(fd.getFileDescriptor())) {
-            red = new Interpreter(in.getChannel().map(FileChannel.MapMode.READ_ONLY, fd.getStartOffset(),
-                    fd.getDeclaredLength()), new Interpreter.Options().setNumThreads(hilos).setUseXNNPACK(true));
+        File f = new File(c.getExternalFilesDir(null), "modelo.tflite");
+        MappedByteBuffer m;
+        if (f.exists()) {
+            try (FileInputStream in = new FileInputStream(f)) {
+                m = in.getChannel().map(FileChannel.MapMode.READ_ONLY, 0, f.length());
+            }
+        } else {
+            try (AssetFileDescriptor fd = c.getAssets().openFd("modelo.tflite");
+                 FileInputStream in = new FileInputStream(fd.getFileDescriptor())) {
+                m = in.getChannel().map(FileChannel.MapMode.READ_ONLY, fd.getStartOffset(), fd.getDeclaredLength());
+            }
         }
+        red = new Interpreter(m, new Interpreter.Options().setNumThreads(hilos).setUseXNNPACK(true));
     }
 
     /** Bytes de la foto → foto derecha de 320 px de lado mayor, como tesis.export.upright. */

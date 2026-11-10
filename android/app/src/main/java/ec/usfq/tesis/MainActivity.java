@@ -78,7 +78,11 @@ public class MainActivity extends Activity {
         try {
             modelo = new Clasificador(this, 4);
         } catch (IOException e) {
-            throw new IllegalStateException("sin modelo.tflite en el paquete", e);
+            TextView t = new TextView(this);
+            t.setText("Falta el modelo: instálalo con python device.py <carpeta> --app verificador.apk");
+            t.setPadding(48, 48, 48, 48);
+            setContentView(t);
+            return;
         }
         setContentView(pantalla());
         if (odk && estado == null) capturar();
@@ -217,6 +221,6 @@ public class MainActivity extends Activity {
     protected void onDestroy() {
         super.onDestroy();
         Clasificador m = modelo;
-        HILO.execute(m::close);  // después de una verificación en curso
+        if (m != null) HILO.execute(m::close);  // después de una verificación en curso
     }
 }
