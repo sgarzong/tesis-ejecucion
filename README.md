@@ -33,8 +33,9 @@ el análisis según la planificación: tabla 5.7 con las falsas alarmas, verific
 intercambio y sumisiones reales de ODK), exactitud condicionada al local, hipótesis 5.8 y errores por cadena.
 
 La latencia y la memoria en el Honor X6b se miden con `python -m tesis.device runs/odk` (teléfono por USB; los pasos
-están en su docstring). Escribe `dispositivo.csv`, que se sube a `runs_odk` en Drive para que `entrenar_tesis` complete
-la tabla 5.7 y dibuje el frente de Pareto.
+están en su docstring). [`tesis/device.py`](tesis/device.py) es un solo archivo con la biblioteca estándar: en otro
+computador basta Python y `python device.py <carpeta>`, y baja adb si falta. Escribe `dispositivo.csv`, que se sube a
+`runs_odk` en Drive para que `entrenar_tesis` complete la tabla 5.7 y dibuje el frente de Pareto.
 
 ## Datos
 

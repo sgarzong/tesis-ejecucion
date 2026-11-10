@@ -78,11 +78,11 @@ INFO: Overall peak memory footprint (MB) via periodic monitoring: 141.2"""
     assert (r["primera_ms"], r["trigesima_ms"], r["mediana_ms"], r["p95_ms"]) == (1520, 1210, 1220, 1400)
     assert r["init_ms"] == 210.512 and r["mem_mb"] == 141.2
     assert parse(salida.replace("count=30", "count=29")) is None and parse("ERROR: Failed to apply delegate") is None
-    raf = pd.DataFrame([{**r, "run": "A_x", "formato": "model_dyn", "xnnpack": True, "odk_activa": True,
-                         "pantalla": True}, {**r, "run": "A_x", "formato": "model_dyn", "p95_ms": 1600,
-                                             "mediana_ms": 1000, "xnnpack": True, "odk_activa": False, "pantalla": True}])
-    s = resumen(raf).iloc[0]
-    assert (s.lat_p50_ms, s.lat_p95_ms, s.rafagas, s.odk_activa) == (1110, 1600, 2, False)
+    raf = [{**r, "run": "A_x", "formato": "model_dyn", "xnnpack": True, "odk_activa": True, "pantalla": True},
+           {**r, "run": "A_x", "formato": "model_dyn", "p95_ms": 1600, "mediana_ms": 1000, "xnnpack": True,
+            "odk_activa": False, "pantalla": True}]
+    [s] = resumen(raf)
+    assert (s["lat_p50_ms"], s["lat_p95_ms"], s["rafagas"], s["odk_activa"]) == (1110, 1600, 2, False)
 
 
 def test_place_moves_copy(tmp_path):
