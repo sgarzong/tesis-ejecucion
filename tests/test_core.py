@@ -9,6 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from tesis.build_dataset import NO_STORE, date_of, merge_aliases, odk_store, store_of
 from tesis.config import CLASSES
 from tesis.degrade import degrade, shake_psf
+from tesis.device import parse, resumen
 from tesis.metrics import IDX, conditional_pred, failed_criteria, verification
 from tesis.metrics import contracts as contracts_from
 from tesis.sort_gui import DISCARD, copy_name, paginate, place
@@ -62,6 +63,26 @@ def test_failed_criteria():
           "lat_p50_ms": 800, "lat_p95_ms": 1200, "mem_mb": 120, "size_mb": 5}
     assert failed_criteria(ok) == []
     assert failed_criteria({**ok, "size_mb": 25, "f1_macro": .8}) == ["f1_macro", "size_mb"]
+
+
+def test_device_parse_and_summary():
+    # Salida de benchmark_model (tiempos en µs); el promedio de ResNet-50 sale en notación científica.
+    salida = """INFO: Initialized session in 210.5ms.
+INFO: Running benchmark for at least 0 iterations and at least 0 seconds but terminate if exceeding 150 seconds.
+INFO: count=0 p5=0 median=0 p95=0
+INFO: count=30 first=1520000 curr=1210000 min=1180000 max=1520000 avg=1.23457e+06 std=61000 p5=1185000 median=1220000 p95=1400000
+INFO: Inference timings in us: Init: 210512, First inference: 0, Warmup (avg): 0, Inference (avg): 1.23457e+06
+INFO: Memory footprint delta from the start of the tool (MB): init=25.1 overall=38.4
+INFO: Overall peak memory footprint (MB) via periodic monitoring: 141.2"""
+    r = parse(salida)
+    assert (r["primera_ms"], r["trigesima_ms"], r["mediana_ms"], r["p95_ms"]) == (1520, 1210, 1220, 1400)
+    assert r["init_ms"] == 210.512 and r["mem_mb"] == 141.2
+    assert parse(salida.replace("count=30", "count=29")) is None and parse("ERROR: Failed to apply delegate") is None
+    raf = pd.DataFrame([{**r, "run": "A_x", "formato": "model_dyn", "xnnpack": True, "odk_activa": True,
+                         "pantalla": True}, {**r, "run": "A_x", "formato": "model_dyn", "p95_ms": 1600,
+                                             "mediana_ms": 1000, "xnnpack": True, "odk_activa": False, "pantalla": True}])
+    s = resumen(raf).iloc[0]
+    assert (s.lat_p50_ms, s.lat_p95_ms, s.rafagas, s.odk_activa) == (1110, 1600, 2, False)
 
 
 def test_place_moves_copy(tmp_path):
@@ -139,6 +160,7 @@ if __name__ == "__main__":
     test_split_no_leak_and_stable()
     test_conditional_and_verification()
     test_failed_criteria()
+    test_device_parse_and_summary()
     with tempfile.TemporaryDirectory() as d:
         test_place_moves_copy(Path(d))
     test_paginate_one_class_per_page()

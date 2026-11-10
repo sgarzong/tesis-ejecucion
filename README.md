@@ -32,6 +32,10 @@ el experimento de cuantización para el teléfono (float16, int8 de rango dinám
 el análisis según la planificación: tabla 5.7 con las falsas alarmas, verificación contra convenio (pares por
 intercambio y sumisiones reales de ODK), exactitud condicionada al local, hipótesis 5.8 y errores por cadena.
 
+La latencia y la memoria en el Honor X6b se miden con `python -m tesis.device runs/odk` (teléfono por USB; los pasos
+están en su docstring). Escribe `dispositivo.csv`, que se sube a `runs_odk` en Drive para que `entrenar_tesis` complete
+la tabla 5.7 y dibuje el frente de Pareto.
+
 ## Datos
 
 No se versionan (volumen y confidencialidad de Industrias Ales; ver `.gitignore`). El conjunto se construye en este
@@ -95,14 +99,19 @@ protocolo común, el int8 con calibración, la máscara con su control sin másc
   fuera de alcance) son de locales de entrenamiento: entrenan en el próximo reentrenamiento y, mientras, sirven de
   comprobación de campo.
 
-Pendiente: latencia, memoria y aumento del paquete en el Honor X6b (A7), de los que dependen la viabilidad, la
-selección lexicográfica y el frente de Pareto; y el prototipo Android (A8).
+- **Latencia (5.6).** `tesis.device` mide con `benchmark_model` de TFLite el modelo solo, con entrada aleatoria: la
+  decodificación y el redimensionamiento de la foto, y el aumento del paquete, se miden con el prototipo. Cada ráfaga
+  de 30 corre en un proceso nuevo y la herramienta da el p95 por ráfaga: se reporta el mayor de las cuatro, que acota
+  por arriba el de las 120 ejecuciones.
+
+Pendiente: correr `tesis.device` en el Honor X6b (A7), de lo que dependen la viabilidad, la selección lexicográfica y
+el frente de Pareto; y el prototipo Android (A8), con la latencia de extremo a extremo y el aumento del paquete.
 
 ## Estructura
 
 ```
 notebooks/   proyecto_ml.ipynb (entregable), entrenar_tesis.ipynb (ajuste fino y TFLite)
-tesis/       código: datos, partición, entrenamiento, cuantización, métricas, herramientas de etiquetado
+tesis/       código: datos, partición, entrenamiento, cuantización, métricas, medición en el teléfono, etiquetado
 tests/       python -m pytest tests
 planificacion_titulacion_reconocimiento_pos_v4.md   protocolo completo de la tesis
 ```
