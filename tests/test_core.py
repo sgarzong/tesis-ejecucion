@@ -9,7 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from tesis.build_dataset import NO_STORE, date_of, merge_aliases, odk_store, store_of
 from tesis.config import CLASSES
 from tesis.degrade import degrade, shake_psf
-from tesis.device import parse, resumen
+from tesis.device import parse, parse_app, resumen
 from tesis.metrics import IDX, conditional_pred, failed_criteria, verification
 from tesis.metrics import contracts as contracts_from
 from tesis.sort_gui import DISCARD, copy_name, paginate, place
@@ -83,6 +83,16 @@ INFO: Overall peak memory footprint (MB) via periodic monitoring: 141.2"""
             "odk_activa": False, "pantalla": True}]
     [s] = resumen(raf)
     assert (s["lat_p50_ms"], s["lat_p95_ms"], s["rafagas"], s["odk_activa"]) == (1110, 1600, 2, False)
+
+    # rafaga.csv del prototipo (Rafaga.java): 30 fotos de 62 a 91 ms, 42 de lectura y reducción.
+    cab = "archivo,leer_ms,reducir_ms,red_ms,total_ms,clase," + ",".join(f"p_{c}" for c in CLASSES) + "\n"
+    filas = [f"f{i:02}.jpg,2.000,40.000,{20 + i}.000,{62 + i}.000,lateral,0.1,0.6,0.1,0.05,0.05,0.05,0.05\n"
+             for i in range(30)]
+    r, fotos = parse_app(cab + "".join(filas) + "#carga_ms=45.500,pico_kb=153600\n")
+    assert (r["primera_ms"], r["trigesima_ms"], r["mediana_ms"], r["p95_ms"]) == (62, 91, 76.5, 90)  # p95: la 29.ª
+    assert (r["init_ms"], r["mem_mb"], r["preproc_ms"], len(fotos), fotos[0]["p_lateral"]) == (45.5, 150, 42, 30, "0.6")
+    assert parse_app(cab + "".join(filas) + "#error=java.io.IOException: no es una imagen\n")[0] is None
+    assert parse_app(cab + "".join(filas[:29]) + "#carga_ms=45.500,pico_kb=153600\n")[0] is None
 
 
 def test_place_moves_copy(tmp_path):

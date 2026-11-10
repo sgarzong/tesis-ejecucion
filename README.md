@@ -37,6 +37,38 @@ están en su docstring). [`tesis/device.py`](tesis/device.py) es un solo archivo
 computador basta Python y `python device.py <carpeta>`, y baja adb si falta. Escribe `dispositivo.csv`, que se sube a
 `runs_odk` en Drive para que `entrenar_tesis` complete la tabla 5.7 y dibuje el frente de Pareto.
 
+## Prototipo Android (A8)
+
+[`android/`](android/) es la verificación en el teléfono, sin conexión (objetivo 5): toma la foto, la clasifica con el
+`.tflite`, la contrasta con el mueble declarado y advierte si es una captura inválida o contenido ajeno. Java sin más
+dependencia que el runtime de TFLite (LiteRT); el preprocesamiento reproduce el del entrenamiento (EXIF, 320 px,
+224 × 224) y la decisión, la de `tesis.metrics.conditional_pred`. Se abre sola o desde una pregunta de foto de ODK
+Collect, a la que devuelve la foto:
+
+```
+type: image   appearance: ex:ec.usfq.tesis.VERIFICAR(mueble=${mueble_nombre}, convenio=${muebles_del_local})
+```
+
+`mueble` va en la nomenclatura del formulario (`CHECK OUT | LATERAL SIMPLE | …`); `convenio`, opcional y separado por
+comas, restringe la decisión a los muebles del local; `camara`, opcional, fija la app de cámara
+(`'com.jeyluta.timestampcamerafree'`).
+
+```powershell
+copy <run>\model_fp16.tflite android\app\src\main\assets\modelo.tflite     # el formato que va al teléfono
+$env:JAVA_HOME = "$env:LOCALAPPDATA\Android\jdk17"; $env:ANDROID_HOME = "$env:LOCALAPPDATA\Android\Sdk"
+android\gradlew.bat -p android assembleRelease        # android\app\build\outputs\apk\release\app-release.apk
+```
+
+Necesita JDK 17 y el SDK de Android (plataforma 35, build-tools 34). La latencia de extremo a extremo se mide con el
+mismo protocolo de ráfagas, sobre 120 fotos reales de ODK de locales de prueba, y se comprueba que el teléfono
+clasifica igual que la evaluación:
+
+```powershell
+python -m tesis.fotos_app                                                          # data/fotos_app/
+python -m tesis.device runs/odk --app android\app\build\outputs\apk\release\app-release.apk --fotos data/fotos_app
+python -m tesis.fotos_app runs/odk/A_mobilenetv3/model_fp16.tflite runs/odk/app_fotos.csv    # paridad
+```
+
 ## Datos
 
 No se versionan (volumen y confidencialidad de Industrias Ales; ver `.gitignore`). El conjunto se construye en este
@@ -107,13 +139,15 @@ protocolo común, el int8 con calibración, la máscara con su control sin másc
 
 Medido en el Honor X6b (A7, `runs_odk/dispositivo.csv`): todas las configuraciones cumplen la latencia y la memoria
 (p95 ≤ 246 ms, ≤ 219 MB), así que la viabilidad depende del recall de rechazo, que ninguna alcanza todavía.
-Pendiente: el prototipo Android (A8), con la latencia de extremo a extremo y el aumento del paquete.
+Pendiente: correr el prototipo (A8) en el Honor X6b, con la latencia de extremo a extremo, la paridad con la
+evaluación y el aumento del paquete, y probarlo desde un formulario de ODK de prueba.
 
 ## Estructura
 
 ```
 notebooks/   proyecto_ml.ipynb (entregable), entrenar_tesis.ipynb (ajuste fino y TFLite)
 tesis/       código: datos, partición, entrenamiento, cuantización, métricas, medición en el teléfono, etiquetado
+android/     prototipo de verificación en el teléfono (A8)
 tests/       python -m pytest tests
 planificacion_titulacion_reconocimiento_pos_v4.md   protocolo completo de la tesis
 ```

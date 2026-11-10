@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application
+        android:label="Verificador de muebles"
+        android:theme="@android:style/Theme.DeviceDefault.Light.DarkActionBar">
+        <activity android:name=".MainActivity" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <!-- Desde una pregunta de foto de ODK Collect: appearance ex:ec.usfq.tesis.VERIFICAR(mueble=${...}) -->
+            <intent-filter>
+                <action android:name="ec.usfq.tesis.VERIFICAR" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+        <!-- Medición de extremo a extremo: la lanza tesis/device.py por adb -->
+        <activity android:name=".Rafaga" android:exported="true" />
+    </application>
+</manifest>

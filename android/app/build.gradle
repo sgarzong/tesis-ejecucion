@@ -1,0 +1,39 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'ec.usfq.tesis'
+    compileSdk 35
+    defaultConfig {
+        applicationId 'ec.usfq.tesis'
+        minSdk 29
+        targetSdk 34
+        versionCode 1
+        versionName '1.0'
+        ndk { abiFilters 'arm64-v8a' }  // el Honor X6b y la flota: el paquete no lleva el runtime de otras CPU
+    }
+    buildTypes {
+        // La latencia se mide con release (sin depuración, compilado por ART); se firma con la clave de depuración
+        // porque es un prototipo que se instala por USB.
+        release { signingConfig signingConfigs.debug }
+    }
+    androidResources { noCompress 'tflite' }  // el modelo se mapea a memoria desde el paquete
+    lint { checkReleaseBuilds false }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    implementation 'com.google.ai.edge.litert:litert:1.4.0'
+}
+
+tasks.named('preBuild') {
+    doFirst {
+        if (!file('src/main/assets/modelo.tflite').exists())
+            throw new GradleException('Falta app/src/main/assets/modelo.tflite: copia ahí el formato que va al teléfono, ' +
+                    'p. ej. runs_odk/A_mobilenetv3/model_fp16.tflite')
+    }
+}
