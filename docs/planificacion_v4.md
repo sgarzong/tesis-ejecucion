@@ -1,5 +1,3 @@
-![Logo institucional](planificacion_titulacion_assets/media/6ac6e8f5fcb48728eecb239ba8a51e569530aa54.png)
-
 **COLEGIO DE POSGRADOS**
 
 MAESTRÍA EN CIENCIA DE DATOS
