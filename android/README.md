@@ -42,8 +42,8 @@ dentro del paquete, se copia a `app/src/main/assets/modelo.tflite`.
 ## Medir en el teléfono
 
 La latencia de extremo a extremo se mide con el protocolo de ráfagas de la sección 5.6, sobre 120 fotos reales de ODK
-de locales de prueba, tal como las guarda ODK (≈1024 px). Aparte se miden las capturas inválidas que el autor tomó a
-resolución completa, que es lo que la app recibe de la cámara. Además, se comprueba que el teléfono clasifica igual
+de locales de prueba, tal como las guarda ODK (≈1024 px). Aparte se miden las capturas inválidas que tomé a resolución
+completa, que es lo que la app recibe de la cámara. Además, se comprueba que el teléfono clasifica igual
 que la evaluación:
 
 ```powershell

@@ -1,7 +1,7 @@
 # Clasificación de muebles de exhibición en dispositivos de gama baja
 
-Tesis de la Maestría en Ciencia de Datos (USFQ) de Sebastián Garzón, y el proyecto de Machine Learning del curso que
-se desprende de ella. Tutor: Ricardo Flores Moyano.
+Soy Sebastián Garzón. Este repositorio tiene mi tesis de la Maestría en Ciencia de Datos (USFQ) y el proyecto de
+Machine Learning del curso que se desprende de ella. Tutor: Ricardo Flores Moyano.
 
 Los mercaderistas de Industrias Ales fotografían cada mueble de exhibición contratado en las cadenas de autoservicio
 (Tía, Favorita, El Rosado, Santa María, Coral) como evidencia del convenio. El modelo clasifica cada foto en **7
@@ -41,12 +41,12 @@ commit `debea6f`; las de la corrida anterior quedan en el commit `b0e7b68`.
 | 2. Partición por local, deduplicación, experimentos A y B | [`split.py`](tesis/split.py), [`build_dataset.py`](tesis/build_dataset.py) | Hecho |
 | 3. Línea base y dos arquitecturas eficientes | [`entrenar_tesis.ipynb`](notebooks/entrenar_tesis.ipynb) | Hecho |
 | 4. Cuantización y medición en el dispositivo | [`entrenar_tesis.ipynb`](notebooks/entrenar_tesis.ipynb) (tabla 5.7, frente de Pareto), [`quantize.py`](tesis/quantize.py), [`device.py`](tesis/device.py) | Hecho en el Honor X6b (A7), sin conexión, con los modelos de la corrida final |
-| 5. Prototipo de verificación local | [`android/`](android/) | Hecho en el Honor X6b (A8) con el modelo de la corrida final. La prueba desde una copia del formulario de ODK es con el modelo anterior |
+| 5. Prototipo de verificación local | [`android/`](android/) | Hecho en el Honor X6b (A8) con el modelo de la corrida final, también desde una copia del formulario de ODK en un supermercado |
 | 6. Errores por clase y por cadena | [`entrenar_tesis.ipynb`](notebooks/entrenar_tesis.ipynb), sección de análisis | Hecho |
 
-## Corrida final: qué cambia tras la revisión del tutor
+## Corrida final: qué cambia respecto de la anterior
 
-La corrida que revisó el tutor se repitió con estas correcciones. Los resultados están en la
+Repetí la corrida anterior con estas correcciones. Los resultados están en la
 [sección siguiente](#resultados-de-la-corrida-final-17-de-noviembre-de-2026).
 
 - **Partición congelada antes de entrenar.** El conjunto se deduplicó primero y los locales se sortearon después, una
@@ -125,7 +125,7 @@ Entre corchetes va el intervalo de Wilson al 95 %. Los umbrales de la tabla 5.7 
   los demás criterios de la tabla 5.7, incluidos los del teléfono.
 - **Capturas inválidas.** De las 90, MobileNetV3 da 58 como captura inválida y 24 como contenido ajeno. Rechaza
   entonces 82 con una u otra categoría (0.911, IC 95 % [0.834, 0.954]) y acepta 8 como mueble: 5 como exhibidor de
-  piso, 2 como check out y 1 como chiclera. El fallo es parecido en las 53 fotos que tomó el autor (reconoce 36) y en
+  piso, 2 como check out y 1 como chiclera. El fallo es parecido en las 53 fotos que tomé yo (reconoce 36) y en
   las 36 que vienen de los formularios de ODK (22). Los dos complementos de la auditoría:
   - En las 83 capturas inválidas en que las dos personas coinciden, el recall es 0.675 (56 de 83, [0.568, 0.766]).
     El desacuerdo entre personas no explica la distancia al umbral.
@@ -290,8 +290,8 @@ Las desviaciones, que la memoria debe declarar, son estas:
   de cuál es. Esto se agregó al encontrar 92 fotos de prueba repetidas en otro local, y ahora ocurre antes del sorteo.
 - **Partición (5.4).** Los locales se sortearon de nuevo el 16 de noviembre de 2026, después de deduplicar; 18 de los
   112 locales de prueba ya lo eran. Tres locales son de prueba por diseño y no por sorteo: Coral de la Y, Supermaxi
-  Iñaquito y Santa María Iñaquito, donde el autor tomó a propósito las capturas inválidas para evaluar. Las capturas
-  inválidas reales se estratifican aparte de las sintéticas.
+  Iñaquito y Santa María Iñaquito, donde tomé a propósito las capturas inválidas para evaluar. Las capturas inválidas
+  reales se estratifican aparte de las sintéticas.
 - **Aumentos (5.5).** El cambio de perspectiva se aproxima con zoom y traslación.
 - **Máscara (5.5).** Cubre 0.70 × 0.33 ≈ 23 % de la imagen.
 - **Tope por local.** `MAX_PER_STORE = 300` no se calibró.
@@ -303,12 +303,12 @@ Las desviaciones, que la memoria debe declarar, son estas:
   histórico (dos). Las 276 de la corrida final vienen de:
   - el formulario *Fotos mal tomadas* de ODK, donde los mercaderistas las tomaron a propósito (las de farmacias quedan
     fuera de alcance);
-  - 64 fotos que el autor tomó a propósito el 16 de noviembre de 2026 en locales que por eso son de prueba;
+  - 64 fotos que tomé a propósito el 16 de noviembre de 2026 en locales que por eso son de prueba;
   - las fotos de SOS y Promociones que la revisión manual encontró oscuras, tapadas, movidas o dirigidas al piso.
 
   Las que son nítidas y muestran otra cosa (una percha, un pasillo, una captura de pantalla) son contenido ajeno,
-  como define la sección 2.2, aunque se hayan tomado como ejemplo de foto mala: 98 capturas de pantalla y 11 de las 64
-  fotos del autor quedaron así. En la corrida anterior la prueba tenía 18 capturas inválidas, 16 de ellas sumadas
+  como define la sección 2.2, aunque se hayan tomado como ejemplo de foto mala: 98 capturas de pantalla y 11 de mis 64
+  fotos quedaron así. En la corrida anterior la prueba tenía 18 capturas inválidas, 16 de ellas sumadas
   después de entrenar, y una se reetiquetó después de evaluar; la partición congelada evita las dos cosas.
 - **Latencia (5.6).** `tesis.device` mide con `benchmark_model` de TFLite el modelo solo, con entrada aleatoria. La
   decodificación y el redimensionamiento de la foto, y el aumento del paquete, se miden con el prototipo. Cada ráfaga
