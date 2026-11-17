@@ -238,14 +238,23 @@ Colab, anteriores a la medición.
   foto tiene mediana 0.000 en las de ODK y 0.024 en las de cámara. En las dos fotos de cámara en que no coinciden,
   ninguno de los dos dice captura inválida; en una, el teléfono acepta un exhibidor de piso donde la evaluación
   rechaza por contenido ajeno.
-- **Desde ODK Collect** (15 de noviembre, con el modelo de la corrida anterior). En una copia del formulario de
-  muebles, asignada a un solo usuario, la pregunta de foto abre el prototipo y este, Timestamp Camera. Una foto oscura
-  de 2560 × 1920 se rechazó como captura inválida en 193 ms, volvió al formulario y llegó a Central como adjunto.
-
-### Pendiente
-
-- Probar el prototipo desde ODK frente a un mueble real: la prueba del formulario fue con una foto oscura, que solo
-  ejercita el rechazo.
+- **Desde ODK Collect.** En una copia del formulario de muebles, asignada a un solo usuario, la pregunta de foto abre
+  el prototipo y este, Timestamp Camera. Son pruebas de funcionamiento, no mediciones.
+  - *15 de noviembre, con el modelo de la corrida anterior.* Una foto oscura de 2560 × 1920 se rechazó como captura
+    inválida en 193 ms, volvió al formulario y llegó a Central como adjunto.
+  - *17 de noviembre, en un supermercado, con el modelo de la corrida final* (MobileNetV3 en float16; el archivo del
+    teléfono es idéntico al evaluado) y el teléfono en modo avión. Fueron dos envíos con un check out declarado, el
+    único mueble del convenio de ese local. En el primero, la foto del check out no dio alerta y volvió sola al
+    formulario. En el segundo, la foto de un mostrador de frutas dio la alerta «No se ve un mueble» en 210 ms y se
+    envió con «Usar de todos modos». Las fotos llegaron a Central al quitar el modo avión. La evaluación en el
+    computador decide lo mismo que el teléfono en las dos fotos, a resolución de cámara y en la copia de 1024 px
+    de Central. Queda grabada la pantalla de toda la prueba.
+  - *Lo que esa prueba deja ver del convenio.* Con un solo mueble en el convenio, la decisión solo puede ser ese
+    mueble o un rechazo. Sin restringir, el mostrador de frutas sale como exhibidor de piso (p = 0.90), que también
+    habría dado alerta. La foto adicional del segundo envío, un exhibidor de otro proveedor que el formulario no pasa
+    por el prototipo, sale en el computador como cabecera sin restringir y como check out restringida al convenio:
+    con esa regla no habría dado alerta.
+  - *Sin probar en un local:* la alerta de otro mueble, la de una foto movida y repetir la foto tras una alerta.
 
 ## Desviaciones respecto de la planificación
 
