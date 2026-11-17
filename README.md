@@ -30,8 +30,8 @@ Para revisar la tesis, el recorrido es: la [planificación](docs/planificacion_v
 [`entrenar_tesis.ipynb`](notebooks/entrenar_tesis.ipynb) y las [desviaciones](#desviaciones-respecto-de-la-planificación)
 de abajo. El código está en [`tesis/`](tesis/) y [`android/`](android/).
 
-Mientras corre la corrida final, `entrenar_tesis.ipynb` está sin salidas; las de la corrida anterior quedan en el
-commit `b0e7b68`.
+`entrenar_tesis.ipynb` trae las salidas de la corrida final (17 de noviembre de 2026), ejecutada con el código del
+commit `debea6f`; las de la corrida anterior quedan en el commit `b0e7b68`.
 
 ## Estado por objetivo específico
 
@@ -40,14 +40,14 @@ commit `b0e7b68`.
 | 1. Conjunto etiquetado y documentado | [`tesis/`](tesis/), pasos 1 y 2; EDA en [`proyecto_ml.ipynb`](notebooks/proyecto_ml.ipynb) | Hecho, con revisión manual en lugar de etiquetas débiles |
 | 2. Partición por local, deduplicación, experimentos A y B | [`split.py`](tesis/split.py), [`build_dataset.py`](tesis/build_dataset.py) | Hecho |
 | 3. Línea base y dos arquitecturas eficientes | [`entrenar_tesis.ipynb`](notebooks/entrenar_tesis.ipynb) | Hecho |
-| 4. Cuantización y medición en el dispositivo | [`entrenar_tesis.ipynb`](notebooks/entrenar_tesis.ipynb) (tabla 5.7, frente de Pareto), [`quantize.py`](tesis/quantize.py), [`device.py`](tesis/device.py) | Hecho en el Honor X6b (A7) |
-| 5. Prototipo de verificación local | [`android/`](android/) | Hecho en el Honor X6b (A8), solo y desde una copia del formulario de ODK |
+| 4. Cuantización y medición en el dispositivo | [`entrenar_tesis.ipynb`](notebooks/entrenar_tesis.ipynb) (tabla 5.7, frente de Pareto), [`quantize.py`](tesis/quantize.py), [`device.py`](tesis/device.py) | Cuantización hecha. La medición en el Honor X6b (A7) es de la corrida anterior; falta repetirla con los modelos nuevos |
+| 5. Prototipo de verificación local | [`android/`](android/) | Hecho en el Honor X6b (A8), solo y desde una copia del formulario de ODK, con el modelo de la corrida anterior; falta repetir la medición con el nuevo |
 | 6. Errores por clase y por cadena | [`entrenar_tesis.ipynb`](notebooks/entrenar_tesis.ipynb), sección de análisis | Hecho |
 
 ## Corrida final: qué cambia tras la revisión del tutor
 
-La corrida anterior (más abajo) se está repitiendo con estas correcciones. Los resultados nuevos reemplazarán a los de
-la sección siguiente cuando termine el entrenamiento.
+La corrida que revisó el tutor se repitió con estas correcciones. Los resultados están en la
+[sección siguiente](#resultados-de-la-corrida-final-17-de-noviembre-de-2026).
 
 - **Partición congelada antes de entrenar.** El conjunto se deduplicó primero y los locales se sortearon después, una
   sola vez más, el 16 de noviembre de 2026. La lista de fotos de cada partición y experimento está en
@@ -101,43 +101,104 @@ rechazo, la segunda persona rechaza 253 con una u otra categoría. Lo que se dis
 inválidas de la prueba le parecieron contenido ajeno (acercamientos legibles a una etiqueta de precio, perchas con
 medio piso, la entrada de un local).
 
-Por eso, además del recall de cada rechazo que exige la tabla 5.7, los resultados llevarán dos complementos, definidos
-aquí antes de tener resultados: el recall de captura inválida sobre las fotos en que las dos personas coinciden, y la
-fracción de fotos de rechazo que el modelo rechaza con cualquiera de las dos categorías.
+Por eso, además del recall de cada rechazo que exige la tabla 5.7, los resultados llevan dos complementos, definidos
+aquí antes de tener resultados (commit `debea6f`): el recall de captura inválida sobre las fotos en que las dos
+personas coinciden, y la fracción de fotos de rechazo que el modelo rechaza con cualquiera de las dos categorías.
 
-## Resultados de la corrida anterior (10 de noviembre de 2026)
+## Resultados de la corrida final (17 de noviembre de 2026)
 
-Son los que revisó el tutor, con la partición del 26 de octubre y el convenio aproximado con las etiquetas.
-Experimento A: prueba en locales no vistos, solo con fotos verificadas, sin las 92 fotos repetidas en otro local y con
-18 capturas inválidas reales.
+Experimento A: 13 972 fotos de prueba de 112 locales que el modelo no vio, todas verificadas a mano. Antes de calcular
+nada, el cuaderno comprueba que cada run se evaluó con la prueba congelada.
 
-- **Arquitecturas.** El F1-macro en float32 es 0.955 para MobileNetV3-Large, 0.951 para EfficientNet-B0 y 0.950 para
-  ResNet-50. La línea base no supera a la mejor eficiente (hipótesis 5.8): la diferencia es −0.005, con IC 95 %
-  [−0.015, +0.015] por bootstrap sobre locales. ResNet-50 pesa 23 MB en su formato más chico, sobre el límite de 20 MB.
-- **Cuantización.** float16 e int8 de rango dinámico pierden a lo sumo 0.002 de F1. El int8 completo rompe las redes
-  eficientes: MobileNetV3 cae a 0.574 y EfficientNet a 0.792. ResNet-50 lo resiste.
-- **En el teléfono** (Honor X6b, el modelo solo), los 17 formatos cumplen la latencia y la memoria. El peor es
-  ResNet-50 en float32, con p95 de 246 ms. MobileNetV3 en float16 da p95 de 25 ms con 38 MB.
-- **Prototipo, de extremo a extremo** (Honor X6b, MobileNetV3 en float16, 120 fotos reales de ODK). La mediana es
-  67 ms y el p95, 118 ms, de los que 17 ms son leer y reducir la foto; la memoria pico es 172 MB. El modelo y el
-  runtime suman 10.0 MB, el 55 % del APK de ODK Collect. El teléfono da la misma clase que la evaluación en las 120.
+| Arquitectura (float32) | MB | F1-macro | Recall macro | Recall de captura inválida (90 fotos) | Recall de contenido ajeno (1 326 fotos) |
+|---|---|---|---|---|---|
+| MobileNetV3-Large | 12.4 | 0.920 | 0.903 | 0.644 [0.541, 0.736] | 0.965 [0.953, 0.973] |
+| EfficientNet-B0 | 16.6 | 0.919 | 0.905 | 0.533 [0.431, 0.633] | 0.974 [0.964, 0.981] |
+| ResNet-50 | 91.0 | 0.903 | 0.884 | 0.489 [0.388, 0.590] | 0.950 [0.937, 0.961] |
+| MobileNetV3-Large sin máscara (control) | 12.1 | 0.929 | 0.911 | 0.578 [0.475, 0.675] | 0.983 [0.975, 0.989] |
+
+Entre corchetes va el intervalo de Wilson al 95 %. Los umbrales de la tabla 5.7 son F1-macro ≥ 0.85, recall macro
+≥ 0.90 y recall de cada rechazo ≥ 0.90.
+
+- **Viabilidad.** Ninguna configuración es viable, porque ninguna arquitectura alcanza el recall de captura inválida.
+  La mejor es MobileNetV3-Large, con 58 de 90. Las dos redes eficientes cumplen los demás criterios predictivos.
+- **Capturas inválidas.** De las 90, MobileNetV3 da 58 como captura inválida y 24 como contenido ajeno. Rechaza
+  entonces 82 con una u otra categoría (0.911, IC 95 % [0.834, 0.954]) y acepta 8 como mueble: 5 como exhibidor de
+  piso, 2 como check out y 1 como chiclera. Este es el segundo complemento de la auditoría, sobre las capturas
+  inválidas; el primero (el recall donde las dos personas coinciden) necesita las predicciones foto por foto.
+- **Arquitecturas (hipótesis 5.8).** ResNet-50 no supera a MobileNetV3: la diferencia de F1-macro es −0.017, con
+  IC 95 % [−0.039, +0.011] por bootstrap sobre locales. Además incumple el recall macro y pesa 23 MB en su formato más
+  chico, sobre el límite de 20 MB.
+- **Por clase** (MobileNetV3). El recall más bajo entre los muebles es el de lateral, 0.844 [0.814, 0.870]: uno de
+  cada diez laterales sale como exhibidor de piso. Los otros cuatro están entre 0.918 y 0.989.
+- **Cuantización.** float16 no pierde F1 frente a float32 (coinciden en más del 99.9 % de las fotos) y pesa la mitad:
+  5.9 MB en MobileNetV3. El int8 de rango dinámico pierde a lo sumo 0.002 de F1. El int8 completo, el que pide el
+  objetivo, rompe las redes eficientes: MobileNetV3 cae a 0.594 (caída de 0.325, IC 95 % [0.260, 0.378]) y
+  EfficientNet-B0 a 0.839 (0.081, [0.061, 0.106]). ResNet-50 lo resiste (0.902). Calibrar con las clases balanceadas
+  no lo arregla: 0.607 y 0.822.
+- **Verificación contra el convenio** (MobileNetV3, con el convenio de las maestras). De la prueba, 5 037 fotos son
+  de un local con convenio fechado y muestran un mueble de ese convenio o un rechazo. En ellas la exactitud es 0.980,
+  y 0.986 si la predicción se restringe a los muebles del convenio.
+  - Pares por intercambio en el histórico (3 333 correctos y 5 515 discrepantes): 1.3 % de falsas alarmas y 99.3 % de
+    detección con la predicción restringida; 1.6 % y 99.3 % sin restringir.
+  - Lo que el mercaderista declaró en ODK, cuando ese mueble está en el convenio: 0.4 % de falsas alarmas en 724 fotos
+    correctas y 17 de 17 errores detectados.
+  - Todas las fotos de ODK con mueble declarado, sin restringir: 3.0 % de falsas alarmas en 1 075 fotos correctas y
+    65 de 73 errores detectados.
+
+  El umbral de falsas alarmas es 5 %.
+- **Por cadena** (MobileNetV3). La exactitud va de 0.891 (Favorita, histórico) a 0.985 (Tía, ODK), sin contar las 7
+  fotos de Liris. Los errores más frecuentes son lateral por exhibidor de piso (Tía y Santa María), exhibidor de piso
+  por cabecera (Favorita) y check out por cabecera (Coral).
+
+La corrida anterior daba a MobileNetV3 un F1-macro de 0.955 y 16 de 18 capturas inválidas. La prueba es otra (locales
+sorteados de nuevo y 90 capturas inválidas reales en lugar de 18), así que las dos cifras no se comparan foto a foto,
+y no se midió cuánto aporta cada cambio.
+
+### Experimento B (temporal)
+
+La prueba de B son las 1 329 fotos del histórico tomadas desde octubre de 2025 en los locales de prueba: 332
+chicleras, 88 laterales, 665 check out, 122 cabeceras, 119 exhibidores de piso y 3 de contenido ajeno. No tiene
+capturas inválidas, así que el recall de ese rechazo no se puede medir en B. El F1-macro promedia las seis clases
+presentes.
+
+| Arquitectura | F1 de B en su prueba | F1 de A en las mismas fotos | A − B, IC 95 % | F1 de B antes del corte |
+|---|---|---|---|---|
+| ResNet-50 | 0.779 | 0.790 | +0.010 [−0.008, +0.030] | 0.949 |
+| EfficientNet-B0 | 0.846 | 0.836 | −0.010 [−0.042, +0.019] | 0.949 |
+| MobileNetV3-Large | 0.805 | 0.782 | −0.023 [−0.040, −0.008] | 0.954 |
+
+«Antes del corte» son las 10 166 fotos del histórico anteriores a octubre de 2025, de los mismos locales y las mismas
+clases.
+
+- El modelo A entrenó con fotos de todo el periodo y no rinde mejor que el B en estas fotos. La baja frente al periodo
+  anterior no viene, entonces, de haber entrenado solo con fotos antiguas.
+- Buena parte de la baja es aritmética. Contenido ajeno tiene 3 fotos y pesa un sexto del promedio; MobileNetV3 y
+  ResNet-50 no aciertan ninguna, y esa clase les aporta un cero. Sobre las cinco clases de mueble, el F1-macro de B es
+  cerca de 0.97 en MobileNetV3 y de 0.93 en ResNet-50 (el de seis clases por 6/5).
+
+### En el teléfono
+
+Las mediciones son de la corrida anterior: las mismas arquitecturas y formatos, con otros pesos. Falta repetirlas con
+los modelos nuevos.
+
+- **El modelo solo** (Honor X6b). Los 17 formatos cumplen la latencia y la memoria. El peor es ResNet-50 en float32,
+  con p95 de 246 ms. MobileNetV3 en float16 da p95 de 25 ms con 38 MB.
+- **Prototipo, de extremo a extremo** (MobileNetV3 en float16, 120 fotos reales de ODK). La mediana es 67 ms y el
+  p95, 118 ms, de los que 17 ms son leer y reducir la foto; la memoria pico es 172 MB. El modelo y el runtime suman
+  10.0 MB, el 55 % del APK de ODK Collect. El teléfono da la misma clase que la evaluación en las 120.
 - **Desde ODK Collect.** En una copia del formulario de muebles, asignada a un solo usuario, la pregunta de foto abre
   el prototipo y este, Timestamp Camera. Una foto oscura de 2560 × 1920 se rechazó como captura inválida en 193 ms,
   volvió al formulario y llegó a Central como adjunto.
-- **Verificación contra convenio** (MobileNetV3). Hay 2.1 % de falsas alarmas sobre pares por intercambio, y se
-  detectan 84 de los 95 errores reales de campo registrados en ODK.
-- **Viabilidad.** Ninguna configuración es viable todavía, y solo por el recall de rechazo: 0.889 (16 de 18) frente
-  al umbral de 0.90. El candidato es MobileNetV3-Large; en float16 empata con float32 y pesa la mitad.
 
-Pendiente:
+### Pendiente
 
-- Entrenar la corrida final en Colab con la partición congelada (`entrenar_tesis.ipynb`).
 - Medir en el Honor X6b los modelos nuevos, sin conexión, y repetir la comparación de predicciones entre el teléfono y
   la evaluación.
+- Calcular el primer complemento de la auditoría y la fracción de rechazo sobre las dos categorías juntas.
+- Investigar por qué el int8 completo degrada las redes eficientes (`python -m tesis.quantize <run> --diagnostico`).
 - Probar el prototipo desde ODK frente a un mueble real: la prueba del formulario fue con una foto oscura, que solo
   ejercita el rechazo.
-- Investigar por qué el int8 completo degrada las redes eficientes (calibración, distribución de las imágenes,
-  operaciones).
 - Volver a correr `proyecto_ml.ipynb` con el conjunto deduplicado.
 
 ## Desviaciones respecto de la planificación
@@ -220,8 +281,10 @@ python -m pytest tests
   1. Se sube `tesis_colab.zip` (lo genera `python -m tesis.export`) a `MyDrive/tesis`.
   2. Se abre el cuaderno con *Entorno de ejecución → GPU* y *Ejecutar todas*.
 
-  `proyecto_ml.ipynb` tarda ≈ 1.5 h en una A100. `entrenar_tesis.ipynb` deja cada run en `MyDrive/tesis/runs_odk`.
-- **Teléfono.** `python -m tesis.device runs/odk` mide los modelos con el teléfono por USB; los pasos están en su
+  `proyecto_ml.ipynb` tarda ≈ 1.5 h en una A100. `entrenar_tesis.ipynb` tardó 5.3 h de entrenamiento y 47 min de
+  cuantización en una L4 con RAM alta; deja cada run en `MyDrive/tesis/runs_final` y el paquete de evidencias en
+  `MyDrive/tesis/evidencia_tesis.zip`.
+- **Teléfono.** `python -m tesis.device runs/final` mide los modelos con el teléfono por USB; los pasos están en su
   docstring. Para el prototipo, ver el [README de `android/`](android/README.md).
 
 ## Uso de IA
