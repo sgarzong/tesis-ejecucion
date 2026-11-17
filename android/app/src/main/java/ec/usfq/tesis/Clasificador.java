@@ -84,6 +84,22 @@ final class Clasificador implements AutoCloseable {
         return r;
     }
 
+    /** La foto derecha y de `lado` px o algo más, para mostrarla: la de reducir() se ve borrosa en pantalla. */
+    static Bitmap previa(byte[] jpeg, int lado) throws IOException {
+        BitmapFactory.Options o = new BitmapFactory.Options();
+        o.inJustDecodeBounds = true;
+        BitmapFactory.decodeByteArray(jpeg, 0, jpeg.length, o);
+        int n = 1;
+        while (Math.max(o.outWidth, o.outHeight) / (2 * n) >= lado) n *= 2;
+        o.inJustDecodeBounds = false;
+        o.inSampleSize = n;
+        Bitmap b = BitmapFactory.decodeByteArray(jpeg, 0, jpeg.length, o);
+        if (b == null) throw new IOException("no es una imagen");
+        Matrix m = orientacion(new ExifInterface(new ByteArrayInputStream(jpeg))
+                .getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL));
+        return m.isIdentity() ? b : Bitmap.createBitmap(b, 0, 0, b.getWidth(), b.getHeight(), m, true);
+    }
+
     /** Probabilidades de las 7 clases para la foto que deja reducir(). */
     float[] clasificar(Bitmap derecha) {
         Bitmap b = Bitmap.createScaledBitmap(derecha, LADO, LADO, true);  // tf.image.resize: bilineal, estirada

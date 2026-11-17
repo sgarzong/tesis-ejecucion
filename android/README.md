@@ -7,7 +7,7 @@ ajeno u otro mueble. Está escrita en Java y su única dependencia es el runtime
 | Archivo | Qué hace |
 |---|---|
 | [`Clasificador.java`](app/src/main/java/ec/usfq/tesis/Clasificador.java) | Repite el preprocesamiento del entrenamiento (EXIF, 320 px y luego 224 × 224) y la decisión condicionada al convenio de `tesis.metrics.conditional_pred` |
-| [`MainActivity.java`](app/src/main/java/ec/usfq/tesis/MainActivity.java) | Pantalla: elegir el mueble declarado, tomar o elegir la foto y ver el veredicto; la misma pantalla atiende la llamada desde ODK |
+| [`MainActivity.java`](app/src/main/java/ec/usfq/tesis/MainActivity.java) | Pantalla: elegir el mueble declarado, tomar o elegir la foto y ver el veredicto; la misma pantalla atiende la llamada desde ODK, donde solo aparece si hay alerta (sin alerta, la foto vuelve sola al formulario) |
 | [`Rafaga.java`](app/src/main/java/ec/usfq/tesis/Rafaga.java) | Medición por ráfagas sobre fotos reales; la lanza [`tesis/device.py`](../tesis/device.py) por adb |
 
 ## Desde ODK Collect
@@ -22,7 +22,10 @@ type: image   appearance: ex:ec.usfq.tesis.VERIFICAR(mueble=${mueble_nombre}, co
 - `convenio` es opcional: los muebles del local separados por comas, a los que se restringe la decisión.
 - `camara` es opcional y fija la app de cámara (`'com.jeyluta.timestampcamerafree'`).
 
-Se prueba en una copia del formulario, no en uno que esté en uso.
+Se prueba en una copia del formulario, no en uno que esté en uso: `prueba_verificador_muebles`, asignada a un solo
+usuario de app. Allí la pregunta de foto pierde `parameters: app=…`, que pasa a ser `camara`, y `muebles_del_local` es
+un cálculo con el tipo de cada mueble del local, porque las etiquetas completas llevan comas y Collect separa los
+parámetros por comas.
 
 ## Compilar
 

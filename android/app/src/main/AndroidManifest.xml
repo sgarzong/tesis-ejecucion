@@ -3,7 +3,9 @@
     <application
         android:label="Verificador de muebles"
         android:theme="@android:style/Theme.DeviceDefault.Light.DarkActionBar">
-        <activity android:name=".MainActivity" android:exported="true">
+        <!-- configChanges: girar el teléfono no recrea la pantalla ni borra el veredicto -->
+        <activity android:name=".MainActivity" android:exported="true"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
