@@ -216,15 +216,16 @@ eficientes.
 ### En el teléfono
 
 Medido el 17 de noviembre de 2026 en el Honor X6b con los modelos de la corrida final: en modo avión y sin red
-activa, con ODK Collect abierto y la pantalla encendida. Cada ráfaga deja registradas esas condiciones. El cuaderno
-se ejecutó antes de medir, así que su tabla 5.7 tiene vacías la latencia y la memoria; las mediciones están aquí y en
-el paquete de evidencias.
+activa, con ODK Collect abierto y la pantalla encendida. Cada ráfaga deja registradas esas condiciones. La tabla
+5.7 y el frente de Pareto del cuaderno se volvieron a ejecutar con estas mediciones; sus demás salidas son las de
+Colab, anteriores a la medición.
 
 - **El modelo solo** (los 17 formatos, 4 ráfagas de 30 inferencias con `benchmark_model`). Todos cumplen la latencia
   (p50 ≤ 2 000 ms y p95 ≤ 3 000 ms) y la memoria (≤ 300 MB). El más lento es ResNet-50 en float16, con p95 de 230 ms,
   y el que más memoria usa, ResNet-50 en float32, con 220 MB. MobileNetV3 en float16 da p50 de 19 ms y p95 de 25 ms
   con 39 MB. El int8 de MobileNetV3 es más lento que su float32 (p50 de 38 ms frente a 19 ms): XNNPACK no lo acepta y
-  corre sin él.
+  corre sin él. En el frente de Pareto de F1-macro frente a p95 quedan MobileNetV3 en float32 y en float16 y
+  EfficientNet-B0 en int8 de rango dinámico, los tres con F1-macro de 0.92.
 - **Prototipo, de extremo a extremo** (MobileNetV3 en float16, 4 ráfagas de 30 fotos).
 
   | Fotos | p50 | p95 | Leer y reducir la foto | Memoria pico | Misma clase que la evaluación |
