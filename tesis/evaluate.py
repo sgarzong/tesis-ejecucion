@@ -1,8 +1,9 @@
 """Evalúa un run sobre su conjunto de prueba (Keras o TFLite) y escribe métricas en JSON.
 
 Uso:
-    python -m tesis.evaluate runs/A_mobilenetv3 model_int8.tflite --contracts data/contracts.csv
-contracts.csv (opcional): store, label   -> una fila por convenio vigente del local.
+    python -m tesis.evaluate runs/A_mobilenetv3 model_int8.tflite
+Guarda las probabilidades (probs_<formato>.npy, filas en el orden de test.csv). La verificación contra convenio y los
+intervalos de confianza se calculan después, desde esas predicciones (tesis.evidencia.tabla).
 """
 import argparse
 import json
@@ -15,7 +16,7 @@ import tensorflow as tf
 
 from .config import CLASSES
 from .data import dataset
-from .metrics import report, verification
+from .metrics import report
 
 
 def predict(model_path, df):
@@ -42,20 +43,12 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("run")
     ap.add_argument("model", nargs="?", default="model.keras")
-    ap.add_argument("--contracts")
     args = ap.parse_args()
 
     run = Path(args.run)
     test = pd.read_csv(run / "test.csv")
     probs = predict(run / args.model, test)
-    y, stores = test.label.map(CLASSES.index).values, test.store.values
-
-    contracts = None
-    if args.contracts:
-        contracts = pd.read_csv(args.contracts).groupby("store").label.agg(set).to_dict()
-    m = report(y, probs, stores, contracts)
-    if contracts:
-        m.update(verification(probs, y, stores, contracts))
+    m = report(test.label.map(CLASSES.index).values, probs)
     m["size_mb"] = (run / args.model).stat().st_size / 2**20
 
     stem = Path(args.model).stem

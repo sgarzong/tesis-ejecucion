@@ -43,10 +43,11 @@ PREFIX = {"MI", "TIA", "SMS", "CORAL"}  # 'MI COMISARIATO X' = 'COMISARIATO X', 
 GENERIC = {"HIPERMARKET", "COMISARIATO", "FERRISARIATO", "SUPERMAXI", "SUPER", "AKI", "MEGA", "GRAN", "CENTRO",
            "MALL", "PLAZA", "LA", "EL", "DE", "DEL", "LOS", "LAS", "Y"}
 HASHES = Path("data/hashes.csv")  # caché de dhash por foto
-STORES = Path("data/stores_split.csv")  # partición vigente (tesis.split)
 ODK_REVIEWS = {Path("data/clasificadas_odk_muebles"): Path("data/odk/muebles_detalle.csv"),  # tesis.odk_candidatas
                Path("data/clasificadas_odk"): Path("data/odk/candidatas_detalle.csv"),
-               # Fotos mal tomadas: el formulario no pide local; cadena y local se leen de la superposición de cada foto
+               # Fotos mal tomadas: el formulario no pide local; cadena y local se leen de la superposición de cada
+               # foto. Incluye las que el autor tomó a propósito el 2026-11-16 (form = capturas_invalidas_autor),
+               # que no pasaron por ODK pero salen de la misma cámara
                Path("data/clasificadas_odk_mal_tomadas"): Path("data/odk/mal_tomadas_detalle.csv")}
 SHELVES = Path("data/odk/candidatas_detalle.csv")  # SOS y Promociones: la percha regular, sin mueble
 # Cadena en ODK (razón social o nombre corto) -> cadena del histórico. Explícito: un mercaderista o un
@@ -234,12 +235,12 @@ def main(revision=Path("data/clasificadas/revision.csv")):
     # Sin local conocido no se puede garantizar que la foto no sea de un local de prueba: fuera.
     gone = m.store == NO_STORE
     # Cuasi-duplicados (ráfagas del mismo mueble) dentro de cada local: queda la primera por fecha. Después, la
-    # misma foto archivada en dos locales: queda la copia que no es de prueba (sección 5.4).
+    # misma foto archivada en dos locales: salen todas sus copias (sección 5.4). Nada de esto mira la partición,
+    # que se sortea después (tesis.split).
     h = m[(m.source != "sint") & ~gone].sort_values(["store", "date", "path"])
     h["hash"] = pd.Series(dhashes(h.path), index=h.index, dtype=object)  # 64 bits: no cabe en int64
     near = near_duplicates(h)
-    split = pd.read_csv(STORES) if STORES.exists() else pd.DataFrame(columns=["store", "split"])
-    cross = cross_store_duplicates(h[~near], split.store[split.split == "test"])
+    cross = cross_store_duplicates(h[~near])
     drop = m.index[gone].union(h.index[near]).union(cross.index[cross])
     for p in m.path[drop]:
         if p.startswith(out.as_posix()):  # enlaces propios; las sintéticas de data/sinteticas no se borran

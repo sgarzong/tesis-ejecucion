@@ -135,13 +135,19 @@ def rafaga_app(remoto, desde, n, hilos):
 
 
 def condiciones():
-    """ODK Collect abierto y pantalla encendida, como en campo (sección 5.7); avisa si no."""
+    """Estado del teléfono al empezar una ráfaga: ODK Collect abierto y pantalla encendida, como en campo (sección
+    5.7), y sin conexión (modo avión y ninguna red activa), que es como debe funcionar la verificación. Avisa de lo
+    que falte; cada ráfaga lo deja escrito en su fila."""
     odk = bool(adb("shell", "pidof", ODK, check=False).stdout.strip())
     pantalla = "mWakefulness=Awake" in adb("shell", "dumpsys", "power").stdout
-    avisos = [t for t, ok in (("ODK Collect cerrado", odk), ("pantalla apagada", pantalla)) if not ok]
+    avion = adb("shell", "settings", "get", "global", "airplane_mode_on").stdout.strip() == "1"
+    sin_red = "Active default network: none" in adb("shell", "dumpsys", "connectivity", check=False).stdout
+    avisos = [t for t, ok in (("ODK Collect cerrado", odk), ("pantalla apagada", pantalla),
+                              ("con conexión (para la evidencia sin conexión: modo avión, sin wifi)", avion and sin_red))
+              if not ok]
     if avisos:
         print("  ojo:", ", ".join(avisos))
-    return odk, pantalla
+    return {"odk_activa": odk, "pantalla": pantalla, "sin_conexion": avion and sin_red}
 
 
 def formato(m):  # la fila float32 de entrenar_tesis se evalúa con model.keras; al teléfono va model_fp32.tflite
@@ -173,13 +179,13 @@ def medir_app(a, telefono, modelos):
 
     filas, por_foto = [], []
     for k in range(RAFAGAS):
-        odk, pantalla = condiciones()
+        estado = condiciones()
         salida = rafaga_app(remoto, k * N, N, a.hilos)
         r, fs = parse_app(salida)
         if r is None:
             raise RuntimeError(f"ráfaga {k + 1}: el prototipo falló\n{salida[-3000:]}")
-        filas.append({"run": run, "formato": fmt, "rafaga": k + 1, **r, "xnnpack": True, "odk_activa": odk,
-                      "pantalla": pantalla, "hilos": a.hilos, "telefono": telefono})
+        filas.append({"run": run, "formato": fmt, "rafaga": k + 1, **r, "xnnpack": True, **estado,
+                      "hilos": a.hilos, "telefono": telefono})
         por_foto += [{"rafaga": k + 1, **f} for f in fs]
         print(f"ráfaga {k + 1}/{RAFAGAS}: mediana {r['mediana_ms']:.0f} ms (preprocesamiento {r['preproc_ms']:.0f}), "
               f"p95 {r['p95_ms']:.0f} ms, {r['mem_mb']:.0f} MB")
@@ -215,7 +221,7 @@ def resumen(raf):
              "trigesima_ms": statistics.mean(r["trigesima_ms"] for r in g),
              "init_ms": statistics.mean(r["init_ms"] for r in g), "rafagas": len(g),
              "xnnpack": all(r["xnnpack"] for r in g), "odk_activa": all(r["odk_activa"] for r in g),
-             "pantalla": all(r["pantalla"] for r in g)}
+             "pantalla": all(r["pantalla"] for r in g), "sin_conexion": all(r.get("sin_conexion", False) for r in g)}
             for (run, fmt), g in sorted(grupos.items())]
 
 
@@ -263,7 +269,7 @@ def main():
     filas = []
     for k in range(RAFAGAS):
         for m in random.Random(k).sample(modelos, len(modelos)):
-            odk, pantalla = condiciones()
+            estado = condiciones()
             xnnpack = True
             r, salida = rafaga(remoto[m], a.hilos)
             if r is None:  # XNNPACK no prepara el MobileNetV3 int8 (como en evaluate.predict): kernels estándar
@@ -272,7 +278,7 @@ def main():
             if r is None:
                 raise RuntimeError(f"{m}: benchmark_model falló\n{salida[-3000:]}")
             filas.append({"run": m.parent.name, "formato": formato(m),
-                          "rafaga": k + 1, **r, "xnnpack": xnnpack, "odk_activa": odk, "pantalla": pantalla,
+                          "rafaga": k + 1, **r, "xnnpack": xnnpack, **estado,
                           "hilos": a.hilos, "telefono": telefono})
             print(f"ráfaga {k + 1}/{RAFAGAS} {m.parent.name}/{m.stem}: mediana {r['mediana_ms']:.0f} ms, "
                   f"p95 {r['p95_ms']:.0f} ms, {r['mem_mb']:.0f} MB{'' if xnnpack else ' (sin XNNPACK)'}")

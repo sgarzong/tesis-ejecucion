@@ -10,10 +10,10 @@ from tesis.build_dataset import NO_STORE, date_of, merge_aliases, odk_store, sto
 from tesis.config import CLASSES
 from tesis.degrade import degrade, shake_psf
 from tesis.device import parse, parse_app, resumen
-from tesis.metrics import IDX, conditional_pred, failed_criteria, verification
+from tesis.metrics import IDX, conditional_pred, contract_keys, failed_criteria, report, verification, wilson
 from tesis.metrics import contracts as contracts_from
 from tesis.sort_gui import DISCARD, copy_name, paginate, place
-from tesis.split import assign_stores, cross_store_duplicates, experiment
+from tesis.split import assign_stores, cross_store_duplicates, experiment, freeze
 
 
 def test_split_no_leak_and_stable():
@@ -34,13 +34,34 @@ def test_split_no_leak_and_stable():
     for exp in "AB":
         p = experiment(df, stores, exp)
         assert set(p["train"].store).isdisjoint(p["test"].store)
-        assert (p["test"].verified == 1).all()
+        assert (p["test"].verified == 1).all() and (p["val"].verified == 1).all()
     assert (p["test"].date >= "2025-10-01").all() and (p["train"].date < "2025-10-01").all()
 
-    # La misma foto en un local de prueba y en uno de entrenamiento: sale la de prueba. Negras y hash 0 no cuentan.
+    # La misma foto en dos locales: salen todas las copias, sin mirar la partición. Negras y hash 0 no cuentan.
     d = pd.DataFrame({"store": ["t", "e", "e2", "t", "e", "t", "e"], "hash": [7, 7, 7, 0, 0, 5, 5],
                       "label": ["lateral"] * 5 + ["captura_invalida"] * 2})
-    assert list(cross_store_duplicates(d, ["t"])) == [True, False, True, False, False, False, False]
+    assert list(cross_store_duplicates(d)) == [True, True, True, False, False, False, False]
+
+
+def test_freeze(tmp_path):
+    rng = np.random.default_rng(1)
+    df = pd.DataFrame({"path": [f"f{i}.jpg" for i in range(2000)], "store": [f"s{i // 10}" for i in range(2000)],
+                       "label": rng.choice(CLASSES, 2000), "date": "2025-11-01", "source": "hist", "verified": 1})
+    stores = assign_stores(df)
+    out = tmp_path / "particion.csv"
+    p = freeze(df, stores, out, pd.Series({f"f{i}.jpg": str(i + 1) for i in range(2000)}))
+    assert set(p.A) == {"train", "val", "test"} and (p.A == p.split).all()  # con todo verificado, A es la partición
+    freeze(df, stores, out)  # la misma lista: pasa
+    split = stores.set_index("store").split
+    other = next(s for s in split.index if split[s] != split["s0"])  # un local de otra partición que s0
+    fuga = pd.Series({"f0.jpg": "9", f"f{int(other[1:]) * 10}.jpg": "9", "f1.jpg": "0"})
+    for bad, kw in ((stores.assign(split=stores.split.replace({"test": "train", "train": "test"})), {}),
+                    (stores, {"hashes": fuga, "force": True})):
+        try:
+            freeze(df, bad, out, **kw)
+        except AssertionError:
+            continue
+        raise SystemExit("freeze debió fallar: cambió la prueba o hay una foto en dos particiones")
 
 
 def test_conditional_and_verification():
@@ -51,11 +72,21 @@ def test_conditional_and_verification():
     y = np.array([IDX["chiclera"], IDX["lateral"]])
     assert list(conditional_pred(probs, ["a", "a"], contracts)) == list(y)
     v = verification(probs, y, ["a", "a"], contracts)
-    assert v == {"detection_rate": 1.0, "false_alarm": 0.0, "n_mismatch": 2, "n_correct": 2}
-    # Convenio aproximado: muebles vistos y declarados; los rechazos y lo no verificado no cuentan.
-    m = pd.DataFrame({"store": ["a", "a", "a", "b"], "label": ["chiclera", "contenido_ajeno", "lateral", "cabecera"],
-                      "declarado": [None, "check_out", None, None], "verified": [1, 1, 0, 1]})
-    assert contracts_from(m) == {"a": {"chiclera", "check_out"}, "b": {"cabecera"}}
+    assert (v["detection_rate"], v["false_alarm"], v["n_mismatch"], v["n_correct"]) == (1.0, 0.0, 2, 2)
+    assert v["false_alarm_libre"] == 0.5  # sin restringir, la primera foto se lee como cabecera: falsa alarma
+    # Convenio desde las maestras: cada fuente rige solo las fotos cercanas a su fecha.
+    conv = pd.DataFrame({"store": ["a", "a", "a"], "clase": ["chiclera", "lateral", "cabecera"],
+                         "fuente": ["m25", "m25", "c26"], "fecha": ["2025-06-30", "2025-06-30", "2026-11-16"]})
+    fotos = pd.DataFrame({"store": ["a", "a", "a", "b"], "date": ["2025-03-01", "2026-10-01", "2024-01-01", None]})
+    assert contracts_from(conv) == {("a", "m25"): {"chiclera", "lateral"}, ("a", "c26"): {"cabecera"}}
+    assert list(contract_keys(fotos, conv)) == [("a", "m25"), ("a", "c26"), None, None]
+    # Exactitud condicionada: solo fotos de un mueble del convenio o de rechazo, en locales con convenio fechado.
+    r = report(np.array([IDX["chiclera"], IDX["cabecera"], IDX["contenido_ajeno"]]), np.eye(len(CLASSES))[[3, 3, 6]],
+               [("a", "m25"), ("a", "m25"), None], contracts_from(conv))
+    assert r["conditional_n"] == 1 and r["accuracy_con_convenio"] == 0.0
+    lo, hi = wilson(16, 18)
+    assert round(lo, 2) == 0.67 and round(hi, 2) == 0.97 and np.isnan(wilson(0, 0)[0])
+    assert np.isnan(report(np.array([0]), np.eye(len(CLASSES))[[0]])["reject_recall"])  # sin rechazos: no evaluable
 
 
 def test_failed_criteria():
@@ -63,6 +94,7 @@ def test_failed_criteria():
           "lat_p50_ms": 800, "lat_p95_ms": 1200, "mem_mb": 120, "size_mb": 5}
     assert failed_criteria(ok) == []
     assert failed_criteria({**ok, "size_mb": 25, "f1_macro": .8}) == ["f1_macro", "size_mb"]
+    assert failed_criteria({**ok, "reject_recall": float("nan")}) == ["reject_recall"]
 
 
 def test_device_parse_and_summary():
@@ -173,5 +205,6 @@ if __name__ == "__main__":
     test_device_parse_and_summary()
     with tempfile.TemporaryDirectory() as d:
         test_place_moves_copy(Path(d))
+        test_freeze(Path(d))
     test_paginate_one_class_per_page()
     print("ok")

@@ -32,6 +32,7 @@ from PIL import Image, ImageOps, ImageTk
 from .config import CLASSES, TO_TESIS
 
 DISCARD = "descartada"
+BLIND = "sin_clase"  # sugerencia de la cola de tesis.auditoria: la foto llega sin clase y el auditor la asigna
 COLS, ROWS = 8, 3
 BUCKETS = (0.95, 0.7)  # dentro de cada clase: seguras primero, dudosas al final
 BG, NEUTRAL, SELECTED = "#111111", "#2b2b2b", "#facc15"
@@ -191,7 +192,9 @@ class App:
             else:
                 t.grid_remove()
         c = rows[0]["label"] if rows else None
-        self.banner.configure(text=f"{CLASSES.index(c) + 1}  {c}" if c else "sin fotos", bg=COLOR.get(c, NEUTRAL))
+        self.banner.configure(text=f"{CLASSES.index(c) + 1}  {c}" if c in CLASSES else
+                              "auditoría: asigna la clase de cada foto" if c == BLIND else "sin fotos",
+                              bg=COLOR.get(c, NEUTRAL))
         self.ready_at = time.monotonic() + 0.15  # una tecla en vuelo no cae sobre la página nueva
         self.prefetch()
         self.update_status()
@@ -214,7 +217,8 @@ class App:
         elif label != self.sugg[p]:  # solo las correcciones resaltan
             text, color = f"→ {CLASSES.index(label) + 1} {label}", COLOR[label]
         else:
-            text, color = ("✓ " if p in self.decided and p not in self.edit else "") + f"{conf:.0%}", NEUTRAL
+            text, color = (("✓ " if p in self.decided and p not in self.edit else "")
+                           + ("sin clase" if label == BLIND else f"{conf:.0%}")), NEUTRAL
             alt = alternative(r)
             if conf < BUCKETS[1] and alt and alt != label:
                 text += f" · a: {alt}?"

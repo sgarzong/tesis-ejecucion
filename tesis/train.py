@@ -15,7 +15,6 @@ from sklearn.utils.class_weight import compute_class_weight
 
 from .config import CLASSES, IMG_SIZE, MASK_H, MASK_W, MODELS, SEED
 from .data import AUGMENT, dataset
-from .split import experiment
 
 
 def overlay_mask():
@@ -48,7 +47,7 @@ def main():
     ap.add_argument("--exp", choices=["A", "B"], default="A")
     ap.add_argument("--no-mask", action="store_true")
     ap.add_argument("--manifest", default="data/manifest.csv")
-    ap.add_argument("--stores", default="data/stores_split.csv")
+    ap.add_argument("--particion", default="data/particion.csv")
     ap.add_argument("--epochs", type=int, default=40)
     ap.add_argument("--lr", type=float, default=1e-4)
     ap.add_argument("--batch", type=int, default=32)
@@ -56,7 +55,10 @@ def main():
 
     keras.utils.set_random_seed(SEED)
     df = pd.read_csv(args.manifest)
-    parts = experiment(df[df.label.notna()], pd.read_csv(args.stores), args.exp)
+    # La partición está congelada (tesis.split.freeze): aquí solo se lee, no se vuelve a sortear.
+    role = df.path.map(pd.read_csv(args.particion, keep_default_na=False).set_index("path")[args.exp])
+    parts = {s: df[role == s] for s in ("train", "val", "test")}
+    assert all(len(v) for v in parts.values()), f"{args.particion} no corresponde a {args.manifest}"
     run = Path("runs") / f"{args.exp}_{args.model}{'_nomask' if args.no_mask else ''}"
     run.mkdir(parents=True, exist_ok=True)
 
