@@ -246,7 +246,6 @@ Colab, anteriores a la medición.
 
 - Probar el prototipo desde ODK frente a un mueble real: la prueba del formulario fue con una foto oscura, que solo
   ejercita el rechazo.
-- Volver a correr `proyecto_ml.ipynb` con el conjunto deduplicado.
 
 ## Desviaciones respecto de la planificación
 
@@ -328,7 +327,10 @@ python -m pytest tests
   1. Se sube `tesis_colab.zip` (lo genera `python -m tesis.export`) a `MyDrive/tesis`.
   2. Se abre el cuaderno con *Entorno de ejecución → GPU* y *Ejecutar todas*.
 
-  `proyecto_ml.ipynb` tarda ≈ 1.5 h en una A100. `entrenar_tesis.ipynb` tardó 5.3 h de entrenamiento y 47 min de
+  `proyecto_ml.ipynb` tarda ≈ 1.5 h en una A100. Su última corrida, del 17 de noviembre de 2026 con la partición
+  congelada, fue local y sin GPU: 1 h para los rasgos de las dos redes y 2 h 40 min para el resto. En Windows con
+  poca memoria libre hay que correrlo con `$env:LOKY_MAX_CPU_COUNT = 1`: en paralelo copia los datos a cada proceso y
+  falla. `entrenar_tesis.ipynb` tardó 5.3 h de entrenamiento y 47 min de
   cuantización en una L4 con RAM alta; deja cada run en `MyDrive/tesis/runs_final` y el paquete de evidencias en
   `MyDrive/tesis/evidencia_tesis.zip`.
 - **Teléfono.** `python -m tesis.device runs/final` mide los modelos con el teléfono por USB; los pasos están en su
