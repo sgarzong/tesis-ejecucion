@@ -1,6 +1,6 @@
 """Paquete de evidencias para la revisión del tutor: lo que respalda los resultados y el repositorio no lleva.
 
-    python -m tesis.evidencia [carpeta de runs] [salida.zip]    # por defecto runs/odk y evidencia_tesis.zip
+    python -m tesis.evidencia [carpeta de runs] [salida.zip]    # por defecto runs/final y evidencia_tesis.zip
     python -m tesis.evidencia --tabla <paquete descomprimido>    # recalcula los resultados desde las predicciones
 
 No lleva fotos. Lleva:
@@ -9,7 +9,7 @@ No lleva fotos. Lleva:
                    convenios con su emparejamiento, locales y las bitácoras de revisión manual
   corridas/<run>/  modelos, args.json (configuración), history.csv (registro de entrenamiento), train/val/test.csv,
                    probs_<formato>.npy (predicciones sobre la prueba) y metrics_<formato>.json
-  dispositivo/     mediciones originales del Honor X6b (dispositivo*.csv del modelo solo, fotos_app_* del prototipo)
+  dispositivo/     mediciones originales del Honor X6b (dispositivo*.csv del modelo solo, fotos_* del prototipo)
   codigo/          el paquete tesis, los cuadernos, las pruebas y la planificación con que se generó todo
 
 En Colab lo arma la última celda de entrenar_tesis con los runs de Drive; lo que sale de data/ viaja en
@@ -107,8 +107,11 @@ def leeme(files, runs):
             "Cada una trae su configuración (`args.json`), el registro de entrenamiento (`history.csv`), las listas "
             "de fotos que usó (`train.csv`, `val.csv`, `test.csv`), los modelos y, por formato, las predicciones "
             "sobre la prueba (`probs_<formato>.npy`, filas en el orden de `test.csv`, columnas en el orden de "
-            "`tesis.config.CLASSES`) y sus métricas.", "",
-            "`dispositivo/`: salidas originales de `python -m tesis.device` en el Honor X6b.", "",
+            "`tesis.config.CLASSES`) y sus métricas. Donde se corrió `python -m tesis.quantize <run> --diagnostico` "
+            "están `int8_diagnostico.csv` (cada variante de cuantización) e `int8_capas.csv` (error por tensor).", "",
+            "`dispositivo/`: salidas originales de `python -m tesis.device` en el Honor X6b. `dispositivo*.csv` es el "
+            "modelo solo; `fotos_app_*` y `fotos_camara_*`, el prototipo de extremo a extremo con fotos como las guarda "
+            "ODK y a resolución de cámara. Cada ráfaga registra si el teléfono estaba sin conexión.", "",
             "## Cómo comprobar los resultados sin las fotos", "", "```",
             "pip install numpy pandas scikit-learn", "cd codigo",
             "python -m tesis.evidencia --tabla ..    # recalcula cada fila desde corridas/*/probs_*.npy", "```", "",
@@ -117,7 +120,7 @@ def leeme(files, runs):
     return "\n".join(out)
 
 
-def paquete(runs=Path("runs/odk"), out=Path("evidencia_tesis.zip")):
+def paquete(runs=Path("runs/final"), out=Path("evidencia_tesis.zip")):
     files, runs = datos(), Path(runs)
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
         z.writestr("LEEME.md", leeme(files, runs))
@@ -125,7 +128,8 @@ def paquete(runs=Path("runs/odk"), out=Path("evidencia_tesis.zip")):
             z.write(f, f"datos/{f.name}")
         for f in sorted(runs.rglob("*")):
             rel = f.relative_to(runs)
-            if f.is_file() and "saved_model" not in rel.parts:  # paso intermedio de la conversión: ya va model.keras
+            # saved_model es un paso intermedio de la conversión (ya va model.keras); benchmark_model, la herramienta
+            if f.is_file() and "saved_model" not in rel.parts and f.name != "benchmark_model":
                 z.write(f, ("dispositivo/" if len(rel.parts) == 1 else "corridas/") + rel.as_posix())
         for pattern in CODIGO:
             for f in sorted(Path().glob(pattern)):

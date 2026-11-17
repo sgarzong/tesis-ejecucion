@@ -1,13 +1,17 @@
 """Fotos para medir el prototipo Android de extremo a extremo (A8) y comprobar que clasifica igual que la evaluación.
 
-    python -m tesis.fotos_app                                           # elige las fotos: data/fotos_app/
-    python -m tesis.fotos_app runs/odk/A_mobilenetv3/model_fp16.tflite runs/odk/fotos_app_por_foto.csv   # paridad
+    python -m tesis.fotos_app                                 # elige las fotos: data/fotos_app/ y data/fotos_camara/
+    python -m tesis.fotos_app runs/final/A_mobilenetv3/model_fp16.tflite runs/final/fotos_app_por_foto.csv   # paridad
     python -m tesis.fotos_app --paquete [destino.zip]     # para medir desde otro computador: APK, device.py, fotos
 
 Las fotos son 120 de ODK de locales de prueba del experimento A, tal como las guarda ODK (≈1024 px, casi todas con
 la etiqueta EXIF de rotación): las capturas inválidas reales y el resto repartido entre las demás clases. Van al
-teléfono con python -m tesis.device runs/odk --app <apk> --fotos data/fotos_app, que escribe fotos_app_por_foto.csv
+teléfono con python -m tesis.device runs/final --app <apk> --fotos data/fotos_app, que escribe fotos_app_por_foto.csv
 con las probabilidades que el teléfono da a cada una.
+
+Las capturas inválidas que salieron directo de la cámara (las que tomó el autor, a resolución completa) van aparte, a
+data/fotos_camara: son otra medición, la de la foto que la app recibe cuando se abre desde ODK, y se corren igual
+con --fotos data/fotos_camara.
 
 Paridad: el teléfono parte de la foto original (EXIF, 320 px y 224 × 224 en Java); la evaluación, de la copia de
 tesis.export (PIL) con tf.image.resize. Se comparan la clase y las probabilidades del mismo .tflite en los dos.
@@ -19,10 +23,13 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from PIL import Image
 
 from .config import CLASSES
 
 OUT = Path("data/fotos_app")
+CAMARA = Path("data/fotos_camara")
+LADO_ODK = 1100  # px del lado mayor: hasta aquí la foto es como la guarda ODK; más grande, salió directo de la cámara
 N = 120
 APK = Path("android/app/build/outputs/apk/release/app-release.apk")
 LEEME = """VERIFICADOR DE MUEBLES: MEDICIÓN EN EL TELÉFONO (A8)
@@ -35,7 +42,7 @@ Qué hay aquí
 Antes de empezar
   1. Python 3.8 o más reciente. En Windows: winget install Python.Python.3.12
   2. Una carpeta modelos/ junto a este archivo con A_mobilenetv3/model_fp16.tflite: la de la medición anterior o,
-     si no está, baja la carpeta A_mobilenetv3 de MyDrive/tesis/runs_odk y descomprímela dentro de modelos/.
+     si no está, baja la carpeta A_mobilenetv3 de MyDrive/tesis/runs_final y descomprímela dentro de modelos/.
   3. El teléfono: Opciones de desarrollador → Depuración USB y Pantalla activa. Conéctalo por USB, acepta este
      computador en el teléfono y deja ODK Collect abierto. (En Windows, si no aparece, instala HiSuite de Honor.)
   Abre una terminal en esta carpeta (en Windows: clic derecho en la carpeta → Abrir en Terminal).
@@ -50,7 +57,7 @@ Antes de empezar
      python device.py modelos --app verificador.apk --fotos fotos_camara
    Deja fotos_camara_dispositivo.csv, fotos_camara_rafagas.csv y fotos_camara_por_foto.csv.
 
-3. Sube los seis .csv a MyDrive/tesis/runs_odk.
+3. Sube los seis .csv a MyDrive/tesis/runs_final.
 
 Probarla a mano
   Después del paso 1 queda instalada con el modelo: «Verificador de muebles». Elige el mueble declarado y toma una
@@ -70,17 +77,23 @@ def elegir():
     m = pd.read_csv("data/manifest.csv")
     m["path320"] = pd.read_csv("data/manifest_320.csv").path  # tesis.export conserva el orden de las filas
     test = set(pd.read_csv("data/stores_split.csv").query("split == 'test'").store)
-    t = m[(m.source == "odk") & (m.verified == 1) & m.store.isin(test)]
+    t = m[(m.source == "odk") & (m.verified == 1) & m.store.isin(test)
+          & m.path.str.lower().str.endswith((".jpg", ".jpeg"))]  # tesis.device solo lleva JPEG al teléfono
     inv, resto = t[t.label == "captura_invalida"], t[t.label != "captura_invalida"]
+    grande = np.array([max(Image.open(p).size) > LADO_ODK for p in inv.path])
+    camara, inv = inv[grande], inv[~grande]
     por_clase = -(-(N - len(inv)) // resto.label.nunique())
     sel = pd.concat([inv, resto.groupby("label").sample(por_clase, random_state=0)]).head(N)
+    sel = pd.concat([sel.assign(carpeta=OUT.name), camara.assign(carpeta=CAMARA.name)])
     sel["archivo"] = [Path(p).name for p in sel.path]
     assert sel.archivo.is_unique
-    OUT.mkdir(parents=True, exist_ok=True)
-    for p, a in zip(sel.path, sel.archivo):
-        shutil.copy2(p, OUT / a)
-    sel.to_csv(OUT / "fotos.csv", index=False)
-    print(f"{len(sel)} fotos -> {OUT}: {sel.label.value_counts().to_dict()}")
+    for d in (OUT, CAMARA):
+        assert not any(d.glob("*.jpg")), f"{d} tiene las fotos de otra selección: muévela o bórrala"
+        d.mkdir(parents=True, exist_ok=True)
+    for p, a, c in zip(sel.path, sel.archivo, sel.carpeta):
+        shutil.copy2(p, OUT.parent / c / a)
+    sel.to_csv(OUT / "fotos.csv", index=False)  # las dos carpetas: la paridad busca cada foto aquí
+    print(sel.groupby("carpeta").label.value_counts().unstack(fill_value=0).to_string())
 
 
 def paridad(modelo, app_csv):

@@ -2,10 +2,10 @@
 herramienta oficial de TensorFlow Lite, por adb.
 
 Es un solo archivo que solo usa la biblioteca estándar: en otro computador basta Python 3.8+ y este archivo.
-1. Baja de MyDrive/tesis/runs_odk las carpetas A_* (bastan los .tflite) y descomprímelas en una carpeta, p. ej. modelos/.
+1. Baja de MyDrive/tesis/runs_final las carpetas A_* (bastan los .tflite) y descomprímelas en una carpeta, p. ej. modelos/.
 2. En el teléfono: Opciones de desarrollador → Depuración USB y Pantalla activa. Conéctalo por USB, acepta este
    computador y abre ODK Collect. (En Windows, si el teléfono no aparece, instala el controlador USB de Honor, HiSuite.)
-3. python device.py modelos              (en el repo: python -m tesis.device runs/odk)  ≈ 30 min
+3. python device.py modelos              (en el repo: python -m tesis.device runs/final)  ≈ 30 min
    python device.py modelos --hilos 2
 Si adb no está instalado, lo baja de Google a <carpeta>/platform-tools; benchmark_model se guarda en <carpeta>.
 
@@ -19,7 +19,7 @@ ninguno. Por formato:
     mem_mb       la mayor memoria pico del proceso
     primera_ms, trigesima_ms   promedio sobre las ráfagas: el estrangulamiento térmico
 Mide solo la inferencia, con entrada aleatoria y XNNPACK en la CPU. Escribe <carpeta>/dispositivo_rafagas.csv y
-<carpeta>/dispositivo.csv: este último se sube a runs_odk en Drive y entrenar_tesis lo lleva a la tabla 5.7.
+<carpeta>/dispositivo.csv: este último se sube a runs_final en Drive y entrenar_tesis lo lleva a la tabla 5.7.
 
 De extremo a extremo, con el prototipo (A8, android/):
     python device.py modelos --app verificador.apk --fotos fotos_app      [--modelo A_mobilenetv3/model_fp16]
@@ -207,7 +207,7 @@ def medir_app(a, telefono, modelos):
           f"{res['modelo_mb']:.1f} MB + runtime {res['runtime_mb']:.1f} MB"
           + (f" = {(m.stat().st_size + runtime) / odk_b:.0%} del APK de ODK Collect ({res['odk_apk_mb']:.0f} MB)"
              if odk_b else ""))
-    print("Sube a MyDrive/tesis/runs_odk: " + ", ".join(str(s) for s in salidas))
+    print("Sube a MyDrive/tesis/runs_final: " + ", ".join(str(s) for s in salidas))
 
 
 def resumen(raf):
@@ -290,7 +290,7 @@ def main():
     for r in res:
         print(f"{r['run']:>22} {r['formato']:<14} p50 {r['lat_p50_ms']:7.1f} ms  p95 {r['lat_p95_ms']:7.1f} ms  "
               f"{r['mem_mb']:6.1f} MB{'' if r['xnnpack'] else '  sin XNNPACK'}")
-    print(f"\nSube {a.carpeta / 'dispositivo.csv'} a MyDrive/tesis/runs_odk y vuelve a correr entrenar_tesis.")
+    print(f"\nSube {a.carpeta / 'dispositivo.csv'} a MyDrive/tesis/runs_final y vuelve a correr entrenar_tesis.")
 
 
 if __name__ == "__main__":

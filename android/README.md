@@ -42,12 +42,15 @@ dentro del paquete, se copia a `app/src/main/assets/modelo.tflite`.
 ## Medir en el teléfono
 
 La latencia de extremo a extremo se mide con el protocolo de ráfagas de la sección 5.6, sobre 120 fotos reales de ODK
-de locales de prueba. Además, se comprueba que el teléfono clasifica igual que la evaluación:
+de locales de prueba, tal como las guarda ODK (≈1024 px). Aparte se miden las capturas inválidas que el autor tomó a
+resolución completa, que es lo que la app recibe de la cámara. Además, se comprueba que el teléfono clasifica igual
+que la evaluación:
 
 ```powershell
-python -m tesis.fotos_app                                                          # data/fotos_app/
-python -m tesis.device runs/odk --app android\app\build\outputs\apk\release\app-release.apk --fotos data/fotos_app
-python -m tesis.fotos_app runs/odk/A_mobilenetv3/model_fp16.tflite runs/odk/fotos_app_por_foto.csv    # paridad
+python -m tesis.fotos_app                                                 # data/fotos_app/ y data/fotos_camara/
+python -m tesis.device runs/final --app android\app\build\outputs\apk\release\app-release.apk --fotos data/fotos_app
+python -m tesis.device runs/final --app android\app\build\outputs\apk\release\app-release.apk --fotos data/fotos_camara
+python -m tesis.fotos_app runs/final/A_mobilenetv3/model_fp16.tflite runs/final/fotos_app_por_foto.csv    # paridad
 ```
 
 En otro computador basta el paquete que arma `python -m tesis.fotos_app --paquete`, con Python y el teléfono. Trae el
