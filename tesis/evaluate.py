@@ -2,6 +2,7 @@
 
 Uso:
     python -m tesis.evaluate runs/A_mobilenetv3 model_int8.tflite
+    python -m tesis.evaluate runs/A_mobilenetv3 model_fp16.tflite --val   # predicciones sobre la validación
 Guarda las probabilidades (probs_<formato>.npy, filas en el orden de test.csv). La verificación contra convenio y los
 intervalos de confianza se calculan después, desde esas predicciones (tesis.evidencia.tabla).
 """
@@ -43,9 +44,15 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("run")
     ap.add_argument("model", nargs="?", default="model.keras")
+    ap.add_argument("--val", action="store_true", help="solo predice la validación: val_probs_<formato>.npy")
     args = ap.parse_args()
 
     run = Path(args.run)
+    if args.val:  # con qué calibrar el umbral del verificador (tesis.metrics.calibrar_umbral) sin tocar la prueba
+        val = pd.read_csv(run / "val.csv")
+        np.save(run / f"val_probs_{Path(args.model).stem}.npy", np.concatenate(  # por partes: dataset() las deja en RAM
+            [predict(run / args.model, val.iloc[i:i + 1000]) for i in range(0, len(val), 1000)]))
+        return
     test = pd.read_csv(run / "test.csv")
     probs = predict(run / args.model, test)
     m = report(test.label.map(CLASSES.index).values, probs)

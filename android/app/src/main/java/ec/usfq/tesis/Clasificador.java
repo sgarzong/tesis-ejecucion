@@ -114,14 +114,22 @@ final class Clasificador implements AutoCloseable {
         return salida[0].clone();
     }
 
-    /** Como tesis.metrics.conditional_pred: la clase más probable entre los muebles del convenio y las dos de
-     * rechazo. Convenio vacío (no se conoce): los cinco muebles. */
+    /** Umbral de decidir(): tesis.metrics.calibrar_umbral con la validación de A_mobilenetv3 en float16, el modelo
+     * que lleva el teléfono. Con otro modelo hay que calibrarlo de nuevo. */
+    static final float UMBRAL = 0.47f;
+
+    /** Como tesis.metrics.decide. La clase más probable se conserva si es un rechazo, un mueble del convenio o un
+     * mueble que el convenio no lista con probabilidad ≥ UMBRAL: hay evidencia de que la foto muestra otro mueble y
+     * el convenio no debe hacerlo pasar por uno contratado. Si no, la más probable entre los muebles del convenio y
+     * los rechazos. Convenio vacío (no se conoce): la más probable. */
     static int decidir(float[] p, Set<Integer> convenio) {
-        int mejor = -1;
-        for (int i = 0; i < p.length; i++)
+        int libre = 0, mejor = -1;
+        for (int i = 0; i < p.length; i++) {
+            if (p[i] > p[libre]) libre = i;
             if ((i >= CAPTURA_INVALIDA || convenio.isEmpty() || convenio.contains(i)) && (mejor < 0 || p[i] > p[mejor]))
                 mejor = i;
-        return mejor;
+        }
+        return libre != mejor && p[libre] >= UMBRAL ? libre : mejor;
     }
 
     private static final Map<String, Integer> DECLARADO = new HashMap<>();

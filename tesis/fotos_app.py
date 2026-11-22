@@ -3,6 +3,8 @@
     python -m tesis.fotos_app                                 # elige las fotos: data/fotos_app/ y data/fotos_camara/
     python -m tesis.fotos_app runs/final/A_mobilenetv3/model_fp16.tflite runs/final/fotos_app_por_foto.csv   # paridad
     python -m tesis.fotos_app --paquete [destino.zip]     # para medir desde otro computador: APK, device.py, fotos
+    python -m tesis.fotos_app --diferencias runs/final/A_mobilenetv3/model_fp16.tflite   # de dónde sale cada diferencia
+    python -m tesis.fotos_app --emular runs/final/A_mobilenetv3    # la prueba con el preprocesamiento del teléfono
 
 Las fotos son 120 de ODK de locales de prueba del experimento A, tal como las guarda ODK (≈1024 px, casi todas con
 la etiqueta EXIF de rotación): las capturas inválidas reales y el resto repartido entre las demás clases. Van al
@@ -23,10 +25,11 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from PIL import Image
+from PIL import Image, ImageOps
 
-from .config import CLASSES
+from .config import CLASSES, IMG_SIZE, REJECT
 
+EXPORT = 320  # tesis.export.SIDE
 OUT = Path("data/fotos_app")
 CAMARA = Path("data/fotos_camara")
 LADO_ODK = 1100  # px del lado mayor: hasta aquí la foto es como la guarda ODK; más grande, salió directo de la cámara
@@ -112,6 +115,147 @@ def paridad(modelo, app_csv):
                         "evaluación": np.array(CLASSES)[pc.argmax(1)], "dif": dif.round(3)})[otra].to_string(index=False))
 
 
+def _bilineal(a, alto, ancho):
+    import tensorflow as tf
+    # Sin antialias y a 8 bits, como Bitmap.createScaledBitmap con filtro; a la mitad exacta es el promedio de 2 × 2
+    return np.clip(np.round(tf.image.resize(a, (alto, ancho), "bilinear").numpy()), 0, 255)
+
+
+# ponytail: solo los giros (EXIF 3, 6 y 8); las orientaciones en espejo no aparecen en estas fotos
+GIRO = {3: lambda a: np.rot90(a, 2), 6: lambda a: np.rot90(a, -1), 8: np.rot90}
+
+
+def como_telefono(path, girar_antes=False, lanczos=False):
+    """La entrada de la red como la arma Clasificador.java (reducir y clasificar), paso a paso en Python, para ver de
+    dónde salen sus diferencias con la evaluación. Las dos opciones cambian un paso por el de la evaluación:
+    `girar_antes` endereza la foto antes de reducirla y `lanczos` la reduce a 320 px con el filtro de tesis.export."""
+    im = Image.open(path)
+    girar = GIRO.get(im.getexif().get(274), lambda a: a)
+    e = min(im.size) // (2 * EXPORT)
+    s = 8 if e >= 8 else 4 if e >= 4 else 2 if e >= 2 else 1
+    if s > 1:
+        im.draft("RGB", (-(-im.width // s), -(-im.height // s)))  # la escala de decodificación JPEG de inSampleSize
+    a = np.asarray(im.convert("RGB"), np.float32)
+    if girar_antes:
+        a = girar(a)
+    f = EXPORT / max(a.shape[:2])
+    h, w = int(a.shape[0] * f + .5), int(a.shape[1] * f + .5)
+    if lanczos:
+        a = np.asarray(Image.fromarray(a.astype(np.uint8)).resize((w, h), Image.Resampling.LANCZOS, reducing_gap=2.0),
+                       np.float32)
+    else:
+        while a.shape[1] >= 2 * w and a.shape[0] >= 2 * h:
+            a = _bilineal(a, a.shape[0] // 2, a.shape[1] // 2)
+        a = _bilineal(a, h, w)
+    return _bilineal(a if girar_antes else girar(a), IMG_SIZE, IMG_SIZE)
+
+
+def sin_recomprimir(path):
+    """La entrada de la red como en la evaluación (tesis.export.upright y tesis.data), pero sin guardar la copia de
+    320 px como JPEG: aísla el efecto de esa recompresión."""
+    im = Image.open(path)
+    im.draft("RGB", (EXPORT * 2, EXPORT * 2))
+    im = ImageOps.exif_transpose(im).convert("RGB")
+    im.thumbnail((EXPORT, EXPORT), Image.Resampling.LANCZOS)
+    return _bilineal(np.asarray(im, np.float32), IMG_SIZE, IMG_SIZE)
+
+
+def red(modelo):
+    """Función entrada (224, 224, 3) -> probabilidades, con el .tflite."""
+    import tensorflow as tf
+    it = tf.lite.Interpreter(str(modelo))
+    it.allocate_tensors()
+    i, o = it.get_input_details()[0]["index"], it.get_output_details()[0]["index"]
+
+    def f(x):
+        it.set_tensor(i, x[None].astype(np.float32))
+        it.invoke()
+        return it.get_tensor(o)[0].copy()
+    return f
+
+
+def diferencias(modelo, runs="runs/final"):
+    """De dónde salen las diferencias entre el teléfono y la evaluación. Compara las probabilidades que dio el
+    teléfono (<runs>/fotos_*_por_foto.csv) con las de la evaluación y con las de cuatro variantes del
+    preprocesamiento, cada una con un paso cambiado. La variante que más se acerca al teléfono dice qué paso
+    explica la diferencia. Escribe <runs>/fotos_diferencias.csv, una fila por foto."""
+    from .evaluate import predict
+
+    f = red(modelo)
+    variantes = {"evaluación sin recomprimir": sin_recomprimir, "teléfono emulado": como_telefono,
+                 "emulado, girando antes": lambda p: como_telefono(p, girar_antes=True),
+                 "emulado, con Lanczos": lambda p: como_telefono(p, lanczos=True)}
+    rechazo, partes = np.isin(CLASSES, list(REJECT)), []
+    for carpeta, g in pd.read_csv(OUT / "fotos.csv").groupby("carpeta"):
+        tel = pd.read_csv(Path(runs) / f"{carpeta}_por_foto.csv").drop_duplicates("archivo").set_index("archivo")
+        t = tel.loc[g.archivo, [f"p_{c}" for c in CLASSES]].to_numpy()
+        d = pd.DataFrame({"carpeta": carpeta, "archivo": g.archivo.values, "etiqueta": g.label.values,
+                          "lado_px": [max(Image.open(p).size) for p in g.path],
+                          "exif": [Image.open(p).getexif().get(274, 1) for p in g.path],
+                          "teléfono": np.array(CLASSES)[t.argmax(1)], "p_max_teléfono": t.max(1).round(3)})
+        ps = {"evaluación": predict(Path(modelo), g.assign(path=g.path320))}
+        ps |= {n: np.array([f(v(p)) for p in g.path]) for n, v in variantes.items()}
+        for n, p in ps.items():
+            d[n] = np.array(CLASSES)[p.argmax(1)]
+            d[f"{n}: dif"] = np.abs(p - t).max(1).round(4)
+            d[f"{n}: misma decisión"] = rechazo[p.argmax(1)] == rechazo[t.argmax(1)]  # rechazar o aceptar la foto
+        partes.append(d)
+        print(f"\n{carpeta}: {len(d)} fotos, lado mayor de {d.lado_px.min()} a {d.lado_px.max()} px, "
+              f"orientación EXIF {d.exif.value_counts().to_dict()}")
+        print(pd.DataFrame([{"variante": n, "misma clase que el teléfono": int((d[n] == d["teléfono"]).sum()),
+                             "misma decisión": int(d[f"{n}: misma decisión"].sum()),
+                             "dif mediana": d[f"{n}: dif"].median(), "dif máxima": d[f"{n}: dif"].max()}
+                            for n in ps]).round(3).to_string(index=False))
+    d = pd.concat(partes)
+    d.to_csv(Path(runs) / "fotos_diferencias.csv", index=False)
+    otra = d[d["evaluación"] != d["teléfono"]]
+    print(f"\nfotos en que el teléfono y la evaluación dan otra clase: {len(otra)} de {len(d)}; "
+          f"cambia la decisión de rechazar o aceptar en {int((~otra['evaluación: misma decisión']).sum())}")
+    print(otra[["carpeta", "etiqueta", "lado_px", "exif", "p_max_teléfono", "teléfono", "evaluación", *variantes]]
+          .to_string(index=False))
+    print(f"probabilidad máxima del teléfono: mediana {d.p_max_teléfono.median():.3f} en todas, "
+          f"{otra.p_max_teléfono.max():.3f} como mucho en las que difieren; con p ≥ 0.5 hay "
+          f"{int((d.p_max_teléfono >= .5).sum())} fotos y difieren {int((otra.p_max_teléfono >= .5).sum())}")
+
+
+def emular(run, formato="model_fp16"):
+    """Toda la prueba del run con el preprocesamiento del teléfono emulado (como_telefono), para contar en cuántas
+    fotos cambiaría la clase o la decisión respecto de la evaluación. No es una medición en el teléfono: es la
+    emulación que `diferencias` contrasta con él. Deja <run>/telefono_emulado_<formato>.npy, en el orden de test.csv."""
+    run = Path(run)
+    test = pd.read_csv(run / "test.csv")
+    original = dict(zip(pd.read_csv("data/manifest_320.csv").path, pd.read_csv("data/manifest.csv").path))
+    f = red(run / f"{formato}.tflite")
+    np.save(run / f"telefono_emulado_{formato[6:]}.npy", np.array([f(como_telefono(original[p])) for p in test.path]))
+    cambios(run, formato)
+
+
+def cambios(run, formato="model_fp16"):
+    """Fotos de la prueba en que la emulación del teléfono y la evaluación dan otra clase u otra decisión."""
+    run = Path(run)
+    test = pd.read_csv(run / "test.csv")
+    ev, tel = np.load(run / f"probs_{formato}.npy"), np.load(run / f"telefono_emulado_{formato[6:]}.npy")
+    y, rechazo = test.label.map(CLASSES.index).to_numpy(), np.isin(CLASSES, list(REJECT))
+    otra = ev.argmax(1) != tel.argmax(1)
+    decision = rechazo[ev.argmax(1)] != rechazo[tel.argmax(1)]
+    print(f"{run.name}, {formato}: {len(test)} fotos de prueba; otra clase en {otra.sum()} ({otra.mean():.2%}); "
+          f"otra decisión de rechazar o aceptar en {decision.sum()} ({decision.mean():.2%})")
+    print(f"exactitud: evaluación {(ev.argmax(1) == y).mean():.4f}, teléfono emulado {(tel.argmax(1) == y).mean():.4f}")
+    print(f"de las {decision.sum()}: la emulación acepta lo que la evaluación rechaza en "
+          f"{(decision & rechazo[ev.argmax(1)]).sum()} y rechaza lo que la evaluación acepta en "
+          f"{(decision & ~rechazo[ev.argmax(1)]).sum()}; la etiqueta es de rechazo en {(decision & rechazo[y]).sum()}")
+    print("otra decisión por etiqueta:", test.label[decision].value_counts().to_dict())
+    for c in sorted(REJECT):
+        m = y == CLASSES.index(c)
+        print(f"recall de {c}: evaluación {(ev.argmax(1)[m] == y[m]).sum()} de {m.sum()}, "
+              f"teléfono emulado {(tel.argmax(1)[m] == y[m]).sum()}")
+    print(f"fotos de rechazo rechazadas con una u otra categoría, de {rechazo[y].sum()}: evaluación "
+          f"{(rechazo[ev.argmax(1)] & rechazo[y]).sum()}, teléfono emulado {(rechazo[tel.argmax(1)] & rechazo[y]).sum()}")
+    print(f"probabilidad máxima de la evaluación: mediana {np.median(ev.max(1)):.3f} en todas y "
+          f"{np.median(ev.max(1)[otra]):.3f} en las que cambian de clase; con p ≥ 0.9 hay {(ev.max(1) >= .9).sum()} "
+          f"fotos y cambian {(otra & (ev.max(1) >= .9)).sum()}")
+
+
 def paquete(destino):
     with zipfile.ZipFile(destino, "w", zipfile.ZIP_DEFLATED) as z:
         z.write(APK, "verificador/verificador.apk")
@@ -127,5 +271,7 @@ if __name__ == "__main__":
         elegir()
     elif sys.argv[1] == "--paquete":
         paquete(Path(sys.argv[2] if len(sys.argv) > 2 else "data/verificador_telefono.zip"))
+    elif sys.argv[1] in ("--diferencias", "--emular", "--cambios"):
+        {"--diferencias": diferencias, "--emular": emular, "--cambios": cambios}[sys.argv[1]](*sys.argv[2:])
     else:
         paridad(*sys.argv[1:3])

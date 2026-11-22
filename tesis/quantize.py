@@ -88,7 +88,10 @@ def diagnostico(run, por_clase=40, n_capas=100):
 
     Escribe <run>/int8_capas.csv (un tensor por fila) e int8_diagnostico.csv (una variante por fila). Sin XNNPACK
     el int8 corre cerca de 1 s por foto en un computador de escritorio: con 40 fotos por clase, alrededor de una
-    hora por modelo."""
+    hora por modelo.
+
+    Mide sobre fotos de la prueba y por eso solo describe por qué falla el int8 ya evaluado. No sirve para elegir
+    una variante: eso sería ajustar con la prueba. Para elegir hay que medir sobre la validación (val.csv)."""
     import numpy as np
 
     from .evaluate import predict  # aquí y no arriba: evaluate no hace falta para convertir

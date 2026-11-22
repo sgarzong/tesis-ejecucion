@@ -36,16 +36,16 @@ Se corren en Colab desde [`notebooks/entrenar_tesis.ipynb`](../notebooks/entrena
 | [`data.py`](data.py) | Carga de imágenes con `tf.data` y aumentos | 5.5 |
 | [`train.py`](train.py) | Aprendizaje por transferencia con protocolo común (MobileNetV3-Large, EfficientNet-B0, ResNet-50), con la máscara dentro del modelo | 5.5 |
 | [`quantize.py`](quantize.py) | Conversión a TFLite: float32, int8 calibrado, float16, int8 de rango dinámico e int8 con calibración balanceada | 5.5 |
-| [`evaluate.py`](evaluate.py) | Predicciones y métricas de un run sobre su prueba, en Keras o TFLite | 5.6 |
-| [`metrics.py`](metrics.py) | F1-macro, recall de cada rechazo con su intervalo de Wilson, verificación contra convenio (restringida y sin restringir), falsas alarmas, bootstrap por local y criterios de la tabla 5.7 | 5.6–5.9 |
-| [`evidencia.py`](evidencia.py) | Paquete de evidencias sin fotos (manifiesto, partición, convenios, revisiones, corridas, mediciones) y la tabla de resultados recalculada desde las predicciones | 5.6–5.9 |
+| [`evaluate.py`](evaluate.py) | Predicciones y métricas de un run sobre su prueba, en Keras o TFLite; con `--val`, las predicciones sobre la validación | 5.6 |
+| [`metrics.py`](metrics.py) | F1-macro, recall de cada rechazo con su intervalo de Wilson, decisión del verificador contra el convenio (restringida, sin restringir y con el umbral calibrado en validación), falsas alarmas, bootstrap por local y criterios de la tabla 5.7 | 5.6–5.9 |
+| [`evidencia.py`](evidencia.py) | Paquete de evidencias sin fotos (manifiesto, partición, convenios, revisiones, corridas, mediciones), su versión reducida sin modelos, y la tabla de resultados recalculada desde las predicciones y comparada con la reportada | 5.6–5.9 |
 
 ### 4. Teléfono
 
 | Módulo | Qué hace | Planificación |
 |---|---|---|
 | [`device.py`](device.py) | Latencia y memoria en el Honor X6b por adb: el modelo solo (A7) y el prototipo de extremo a extremo (A8). Es un solo archivo con la biblioteca estándar, para correrlo en cualquier computador | 5.6, 5.7 |
-| [`fotos_app.py`](fotos_app.py) | Elige las fotos reales de ODK con que se mide el prototipo, compara sus predicciones con las de la evaluación y arma el paquete para medir desde otro computador | 5.6 |
+| [`fotos_app.py`](fotos_app.py) | Elige las fotos reales de ODK con que se mide el prototipo, compara sus predicciones con las de la evaluación, emula en Python el preprocesamiento del teléfono para ver de dónde sale cada diferencia y arma el paquete para medir desde otro computador | 5.6 |
 
 ## Datos
 

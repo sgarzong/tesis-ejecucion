@@ -48,6 +48,48 @@ def conditional_pred(probs, stores, contracts):
     return np.where(mask, probs, -np.inf).argmax(1)
 
 
+def decide(probs, stores, contracts, tau=np.inf):
+    """Decisión del verificador. La clase más probable se conserva si es un rechazo, un mueble del convenio o un
+    mueble que el convenio no lista con probabilidad ≥ `tau`: hay evidencia de que la foto muestra otro mueble. Si
+    no, se decide dentro del convenio. `tau` sale de la validación (calibrar_umbral). Con tau=inf es
+    conditional_pred, que no puede ver un mueble fuera del convenio y lo hace pasar por uno contratado; con tau=0,
+    el argmax sin restringir."""
+    free, cond = probs.argmax(1), conditional_pred(probs, stores, contracts)
+    return np.where((free != cond) & (probs.max(1) >= tau), free, cond)
+
+
+def pares_fuera_convenio(y, stores, contracts):
+    """Pares (imagen, mueble declarado) que la restricción al convenio no deja ver: la foto muestra un mueble que el
+    convenio de su local no lista y se declara cada uno de los que sí lista. Todos son discrepantes. Incluye los
+    locales con un solo mueble en el convenio, que verification_pairs deja fuera."""
+    img, declared = [], []
+    for i, (label, s) in enumerate(zip(y, stores)):
+        own = contracts.get(s)
+        if own is None or label in REJECT_IDX or CLASSES[label] in own:
+            continue
+        for c in own:
+            img.append(i)
+            declared.append(IDX[c])
+    return np.array(img, dtype=int), np.array(declared, dtype=int)
+
+
+def calibrar_umbral(probs, y, stores, contracts):
+    """Umbral de `decide`, con fotos de validación: el que maximiza la detección de un mueble fuera del convenio
+    (pares_fuera_convenio) menos las falsas alarmas (fotos que muestran un mueble de su convenio, declarado tal
+    cual), es decir, la J de Youden, sobre una rejilla de centésimas. En empate, el mayor. inf si no hay con qué."""
+    ok = np.array([s in contracts and CLASSES[c] in contracts[s] for c, s in zip(y, stores)])
+    img, dec = pares_fuera_convenio(y, stores, contracts)
+    if not ok.any() or not len(img):
+        return float("inf")
+    free, cond, pmax = probs.argmax(1), conditional_pred(probs, stores, contracts), probs.max(1)
+    grid = np.arange(101) / 100
+    j = []
+    for tau in grid:
+        d = np.where((free != cond) & (pmax >= tau), free, cond)
+        j.append((d[img] != dec).mean() - (d[ok] != y[ok]).mean())
+    return float(grid[np.flatnonzero(np.array(j) >= max(j) - 1e-12)[-1]])
+
+
 def report(y, probs, stores=None, contracts=None, labels=None):
     """`labels`: clases sobre las que promedian F1-macro y recall-macro (todas). El experimento B pasa las que su
     prueba tiene: una clase sin fotos aporta un cero al promedio que no dice nada del modelo."""
@@ -107,27 +149,39 @@ def verification_pairs(y, stores, contracts):
     return np.array(img), np.array(declared), np.array(correct)
 
 
-def verification(probs, y, stores, contracts):
-    """Tasa de detección sobre pares discrepantes y de falsas alarmas sobre pares correctos. Las `_libre` son las
-    mismas con la predicción sin restringir al convenio: restringir baja las falsas alarmas, pero no deja ver un
-    mueble que el convenio no lista."""
+def verification(probs, y, stores, contracts, tau=np.inf):
+    """Tasa de detección sobre pares discrepantes y de falsas alarmas sobre pares correctos, con la decisión de
+    `decide` y su umbral `tau`. Las `_restringida` y `_libre` son las mismas con la predicción restringida al
+    convenio y sin restringir. `fuera_*` mide lo que la restricción no deja ver (pares_fuera_convenio): un mueble
+    que el convenio no lista, declarado como uno que sí."""
     img, declared, correct = verification_pairs(y, stores, contracts)
     if not len(img):  # ninguna foto con convenio fechado (NaN incumple el criterio de falsas alarmas)
         return {"detection_rate": float("nan"), "false_alarm": float("nan"), "n_mismatch": 0, "n_correct": 0}
-    alert = conditional_pred(probs, stores, contracts)[img] != declared  # cualquier alerta: discrepancia o rechazo
-    free = probs.argmax(1)[img] != declared
-    return {"detection_rate": float(alert[~correct].mean()), "false_alarm": float(alert[correct].mean()),
-            "detection_libre": float(free[~correct].mean()), "false_alarm_libre": float(free[correct].mean()),
-            "n_mismatch": int((~correct).sum()), "n_correct": int(correct.sum())}
+    out_img, out_dec = pares_fuera_convenio(y, stores, contracts)
+    out = {"n_mismatch": int((~correct).sum()), "n_correct": int(correct.sum()),
+           "fuera_n": len(out_img), "fuera_fotos": len(set(out_img))}
+    for sufijo, t in (("", tau), ("_restringida", np.inf), ("_libre", 0)):
+        d = decide(probs, stores, contracts, t)
+        alert = d[img] != declared  # cualquier alerta: discrepancia o rechazo
+        out |= {("detection_rate" if not sufijo else "detection" + sufijo): float(alert[~correct].mean()),
+                "false_alarm" + sufijo: float(alert[correct].mean()),
+                "fuera_detection" + sufijo: float((d[out_img] != out_dec).mean()) if len(out_img) else float("nan")}
+    return out
 
 
-def evaluate_run(test, probs, conv, labels=None):
+def evaluate_run(test, probs, conv, labels=None, tau=np.inf):
     """Fila de resultados de un run y formato sobre su prueba (`test`: filas del manifiesto, `probs` alineadas):
     métricas predictivas con el n y el IC 95 % de cada rechazo, y verificación contra el convenio de `conv`
-    (data/convenios.csv). La verificación se mide dos veces (sección 5.9): pares por intercambio sobre el histórico
-    y lo que el mercaderista declaró en ODK. De ODK, `odk_*` son las fotos cuyo mueble declarado está en el convenio
-    del local, con la predicción restringida a él; `odk_libre_*`, todas las declaradas, sin restringir (las
-    maestras solo listan los muebles alquilados; los otros formularios declaran muebles que no están en ellas)."""
+    (data/convenios.csv). `tau` es el umbral de `decide`, calibrado con la validación del run; con inf, la decisión
+    es la restringida al convenio.
+
+    La verificación se mide dos veces (sección 5.9) y son experimentos distintos: pares por intercambio sobre el
+    histórico (discrepancias construidas) y lo que el mercaderista declaró en ODK (errores reales de campo). De ODK,
+    `odk_*` son las fotos cuyo mueble declarado está en el convenio del local, con la predicción restringida a él;
+    `odk_libre_*`, `odk_todas_restringida_*` y `odk_umbral_*`, todas las que declaran un mueble, con cada decisión
+    (las maestras solo listan los muebles alquilados; los otros formularios declaran muebles que no están en ellas).
+    `convenio_*` es la exactitud sobre todas las fotos de un local con convenio fechado, también las que muestran un
+    mueble que el convenio no lista: en esas la decisión restringida falla por construcción."""
     y = test.label.map(IDX).values
     con, keys = contracts(conv), contract_keys(test, conv)
     r = report(y, probs, keys, con, labels)
@@ -138,8 +192,13 @@ def evaluate_run(test, probs, conv, labels=None):
         out |= {f"{c}_n": pc["support"], f"{c}_recall": pc["recall"] if pc["support"] else float("nan"),
                 f"{c}_ic95": "[{:.3f}, {:.3f}]".format(*pc["recall_ic95"])}
     out |= {k: r[k] for k in ("conditional_accuracy", "accuracy_con_convenio", "conditional_n")}
+    reglas = (("", tau), ("_restringida", np.inf), ("_libre", 0))
+    fechado = np.array([k in con for k in keys])
+    out |= {"umbral": tau, "convenio_n": int(fechado.sum())}
+    out |= {"convenio_accuracy" + s: float((decide(probs, keys, con, t)[fechado] == y[fechado]).mean())
+            if fechado.any() else float("nan") for s, t in reglas}
     hist = (test.source == "hist").values
-    out |= verification(probs[hist], y[hist], keys[hist], con)
+    out |= verification(probs[hist], y[hist], keys[hist], con, tau)
     odk = np.array([s == "odk" and d in con.get(k, ()) for s, d, k in zip(test.source, test.declarado, keys)])
     dec = test.declarado[odk].map(IDX).values
     alert, ok = conditional_pred(probs[odk], keys[odk], con) != dec, y[odk] == dec  # ok: la foto muestra lo declarado
@@ -147,10 +206,13 @@ def evaluate_run(test, probs, conv, labels=None):
             "odk_detected": int(alert[~ok].sum()), "odk_n_err": int((~ok).sum())}
     todas = ((test.source == "odk") & test.declarado.isin(MUEBLES)).values
     dec = test.declarado[todas].map(IDX).values
-    free, ok = probs[todas].argmax(1) != dec, y[todas] == dec
-    return out | {"odk_libre_false_alarm": float(free[ok].mean()) if ok.any() else float("nan"),
-                  "odk_libre_n_ok": int(ok.sum()), "odk_libre_detected": int(free[~ok].sum()),
-                  "odk_libre_n_err": int((~ok).sum())}
+    ok = y[todas] == dec
+    out |= {"odk_libre_n_ok": int(ok.sum()), "odk_libre_n_err": int((~ok).sum())}
+    for s, t in (("libre", 0), ("todas_restringida", np.inf), ("umbral", tau)):
+        alert = decide(probs[todas], keys[todas], con, t) != dec
+        out |= {f"odk_{s}_false_alarm": float(alert[ok].mean()) if ok.any() else float("nan"),
+                f"odk_{s}_detected": int(alert[~ok].sum())}
+    return out
 
 
 def failed_criteria(m):

@@ -10,7 +10,8 @@ from tesis.build_dataset import NO_STORE, date_of, merge_aliases, odk_store, sto
 from tesis.config import CLASSES
 from tesis.degrade import degrade, shake_psf
 from tesis.device import parse, parse_app, resumen
-from tesis.metrics import IDX, conditional_pred, contract_keys, failed_criteria, report, verification, wilson
+from tesis.metrics import (IDX, calibrar_umbral, conditional_pred, contract_keys, decide, failed_criteria,
+                           pares_fuera_convenio, report, verification, wilson)
 from tesis.metrics import contracts as contracts_from
 from tesis.sort_gui import DISCARD, copy_name, paginate, place
 from tesis.split import assign_stores, cross_store_duplicates, experiment, freeze
@@ -87,6 +88,71 @@ def test_conditional_and_verification():
     lo, hi = wilson(16, 18)
     assert round(lo, 2) == 0.67 and round(hi, 2) == 0.97 and np.isnan(wilson(0, 0)[0])
     assert np.isnan(report(np.array([0]), np.eye(len(CLASSES))[[0]])["reject_recall"])  # sin rechazos: no evaluable
+
+
+def test_decide_no_convierte_discrepancia_en_coincidencia():
+    # El convenio solo tiene check out y la foto muestra una cabecera: restringida, pasaría por check out.
+    con, s = {"a": {"check_out"}}, ["a"] * 3
+    p = np.zeros((3, len(CLASSES)))
+    p[0, IDX["cabecera"]], p[0, IDX["check_out"]] = 0.9, 0.1    # cabecera clara
+    p[1, IDX["cabecera"]], p[1, IDX["check_out"]] = 0.55, 0.45  # check out que el modelo duda
+    p[2, IDX["check_out"]] = 1.0
+    y = np.array([IDX["cabecera"], IDX["check_out"], IDX["check_out"]])
+    assert list(decide(p, s, con)) == [IDX["check_out"]] * 3
+    assert list(decide(p, s, con, 0.8)) == [IDX["cabecera"], IDX["check_out"], IDX["check_out"]]
+    assert list(decide(p, s, con, 0)) == list(p.argmax(1))
+    img, dec = pares_fuera_convenio(y, s, con)
+    assert list(img) == [0] and list(dec) == [IDX["check_out"]]
+    assert calibrar_umbral(p, y, s, con) == 0.9  # el mayor que detecta la cabecera sin falsas alarmas
+    v = verification(p, y, s, {"a": {"check_out"}, "b": {"chiclera", "lateral"}}, 0.8)
+    assert np.isnan(v["false_alarm"]) and v["n_correct"] == 0  # sin locales de dos muebles no hay pares por intercambio
+
+
+def test_decidir_del_prototipo_es_decide(tmp_path):
+    """Clasificador.decidir (Java) y tesis.metrics.decide dan lo mismo: el método sale del .java tal como está y se
+    compila sin Android. Sin JDK (javac en JAVA_HOME o en el PATH) no hay con qué probarlo y se salta."""
+    import os
+    import re
+    import shutil
+    import subprocess
+
+    import pytest
+
+    home = os.environ.get("JAVA_HOME")
+    javac = shutil.which("javac", path=str(Path(home) / "bin") if home else None) or shutil.which("javac")
+    if not javac:
+        pytest.skip("sin JDK")
+    java = (Path(__file__).resolve().parents[1] / "android/app/src/main/java/ec/usfq/tesis/Clasificador.java").read_text("utf-8")
+    umbral = re.search(r"static final float UMBRAL = ([0-9.]+)f;", java)
+    metodo = re.search(r"static int decidir\(float\[\] p, Set<Integer> convenio\) \{.*?\n    \}", java, re.S).group()
+    (tmp_path / "Arnes.java").write_text("""import java.util.*;
+public class Arnes {
+    static final int CAPTURA_INVALIDA = 5;
+    %s
+    %s
+    public static void main(String[] a) {
+        StringBuilder o = new StringBuilder();
+        for (String l : new Scanner(System.in).useDelimiter("\\\\A").next().split("\\n")) {
+            String[] x = l.trim().split(";", -1);
+            float[] p = new float[7];
+            for (int i = 0; i < 7; i++) p[i] = Float.intBitsToFloat((int) Long.parseLong(x[0].split(",")[i]));
+            Set<Integer> c = new HashSet<>();
+            if (!x[1].isEmpty()) for (String s : x[1].split(",")) c.add(Integer.parseInt(s));
+            o.append(decidir(p, c)).append(' ');
+        }
+        System.out.print(o);
+    }
+}""" % (umbral.group(), metodo), encoding="utf-8")
+    subprocess.run([javac, "-d", str(tmp_path), str(tmp_path / "Arnes.java")], check=True)
+    rng = np.random.default_rng(0)
+    p = rng.dirichlet(np.full(len(CLASSES), .4), 2000).astype(np.float32)  # con y sin una clase dominante
+    conv = [sorted(rng.choice(5, rng.integers(0, 4), replace=False)) for _ in p]  # vacío: el convenio no se conoce
+    con = {i: {CLASSES[c] for c in cs} for i, cs in enumerate(conv) if cs}
+    entrada = "\n".join(",".join(str(int(b)) for b in x.view(np.uint32)) + ";" + ",".join(map(str, cs))
+                        for x, cs in zip(p, conv))  # los bits de cada float32: Java recibe el mismo número
+    r = subprocess.run([str(Path(javac).with_name("java")), "-cp", str(tmp_path), "Arnes"], input=entrada,
+                       capture_output=True, text=True, check=True)
+    assert list(map(int, r.stdout.split())) == list(decide(p, range(len(p)), con, float(umbral.group(1))))
 
 
 def test_failed_criteria():
@@ -201,6 +267,7 @@ if __name__ == "__main__":
     import tempfile
     test_split_no_leak_and_stable()
     test_conditional_and_verification()
+    test_decide_no_convierte_discrepancia_en_coincidencia()
     test_failed_criteria()
     test_device_parse_and_summary()
     with tempfile.TemporaryDirectory() as d:
