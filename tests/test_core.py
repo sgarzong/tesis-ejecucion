@@ -88,6 +88,8 @@ def test_conditional_and_verification():
     lo, hi = wilson(16, 18)
     assert round(lo, 2) == 0.67 and round(hi, 2) == 0.97 and np.isnan(wilson(0, 0)[0])
     assert np.isnan(report(np.array([0]), np.eye(len(CLASSES))[[0]])["reject_recall"])  # sin rechazos: no evaluable
+    for rechazo in ("captura_invalida", "contenido_ajeno"):  # con fotos de un solo rechazo tampoco, sea cual sea
+        assert np.isnan(report(np.array([IDX[rechazo]]), np.eye(len(CLASSES))[[IDX[rechazo]]])["reject_recall"])
 
 
 def test_decide_no_convierte_discrepancia_en_coincidencia():

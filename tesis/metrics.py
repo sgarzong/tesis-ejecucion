@@ -10,7 +10,7 @@ from sklearn.metrics import confusion_matrix, f1_score, precision_recall_fscore_
 from .config import CLASSES, REJECT, THRESHOLDS, VENTANA_CONVENIO
 
 IDX = {c: i for i, c in enumerate(CLASSES)}
-REJECT_IDX = [IDX[c] for c in REJECT]
+REJECT_IDX = sorted(IDX[c] for c in REJECT)  # REJECT es un conjunto: su orden cambia de una ejecución a otra
 MUEBLES = [c for c in CLASSES if c not in REJECT]
 
 
@@ -102,8 +102,9 @@ def report(y, probs, stores=None, contracts=None, labels=None):
         "recall_macro": recall_score(y, pred, labels=labels, average="macro", zero_division=0),
         "per_class": {c: {"precision": p[i], "recall": r[i], "support": int(n[i]),
                           "recall_ic95": wilson(round(r[i] * n[i]), int(n[i]))} for i, c in enumerate(CLASSES)},
-        # El umbral se exige a cada rechazo; sin fotos de alguno no hay con qué medirlo (NaN incumple)
-        "reject_recall": min(r[i] if n[i] else float("nan") for i in REJECT_IDX),
+        # El umbral se exige a cada rechazo; sin fotos de alguno no hay con qué medirlo (NaN incumple). np.min y no
+        # min: el de Python devuelve NaN o no según el orden de los argumentos.
+        "reject_recall": float(np.min([r[i] if n[i] else np.nan for i in REJECT_IDX])),
         "confusion": confusion_matrix(y, pred, labels=every, normalize="true").round(3).tolist(),
     }
     if contracts is not None:
