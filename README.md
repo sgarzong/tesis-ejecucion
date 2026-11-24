@@ -17,6 +17,7 @@ clases** para alertar, en el mismo teléfono, cuando la evidencia no sirve:
 
 ```
 docs/planificacion_v4.md      la planificación aprobada: objetivos, métricas, umbrales (tabla 5.7) y cronograma
+docs/memoria/                 la memoria en formato de congreso IEEE (memoria.tex, borrador) y el script de sus figuras
 notebooks/
   entrenar_tesis.ipynb        la tesis: entrenamiento, cuantización y análisis, con los resultados
   proyecto_ml.ipynb           el proyecto del curso: EDA, transfer learning con regresión logística, validación agrupada
@@ -41,7 +42,7 @@ commit `debea6f`; las de la corrida anterior quedan en el commit `b0e7b68`.
 | 2. Partición por local, deduplicación, experimentos A y B | [`split.py`](tesis/split.py), [`build_dataset.py`](tesis/build_dataset.py) | Hecho |
 | 3. Línea base y dos arquitecturas eficientes | [`entrenar_tesis.ipynb`](notebooks/entrenar_tesis.ipynb) | Hecho |
 | 4. Cuantización y medición en el dispositivo | [`entrenar_tesis.ipynb`](notebooks/entrenar_tesis.ipynb) (tabla 5.7, frente de Pareto), [`quantize.py`](tesis/quantize.py), [`device.py`](tesis/device.py) | Hecho en el Honor X6b (A7), sin conexión, con los modelos de la corrida final |
-| 5. Prototipo de verificación local | [`android/`](android/) | Hecho en el Honor X6b (A8) con el modelo de la corrida final, también desde una copia del formulario de ODK en un supermercado. La decisión corregida contra el convenio está instalada en el teléfono desde el 22 de noviembre; falta probarla en un local |
+| 5. Prototipo de verificación local | [`android/`](android/) | Hecho en el Honor X6b (A8) con el modelo de la corrida final, también desde una copia del formulario de ODK en un supermercado, con la decisión corregida contra el convenio (23 de noviembre) |
 | 6. Errores por clase y por cadena | [`entrenar_tesis.ipynb`](notebooks/entrenar_tesis.ipynb), sección de análisis | Hecho |
 
 ## Corrida final: qué cambia respecto de la anterior
@@ -384,12 +385,25 @@ Colab, anteriores a la medición.
     corregida ([verificación contra el convenio](#verificación-contra-el-convenio)) da alerta de otro mueble. El
     mostrador de frutas también la da, como exhibidor de piso (p = 0.90).
   - *La decisión corregida en el teléfono.* El prototipo se reinstaló el 22 de noviembre de 2026 con la decisión
-    nueva (`Clasificador.decidir`, con τ = 0.47) y el mismo modelo; arranca y lo carga. Las mediciones y las dos
-    pruebas de arriba son con la decisión restringida. La decisión es una comparación de siete números y no cambia la
-    latencia ni la memoria. Una prueba unitaria compila ese método sin Android y comprueba que decide igual que
+    nueva (`Clasificador.decidir`, con τ = 0.47) y el mismo modelo. Las mediciones y las dos pruebas de arriba son
+    con la decisión restringida. La decisión es una comparación de siete números y no cambia la latencia ni la
+    memoria. Una prueba unitaria compila ese método sin Android y comprueba que decide igual que
     `tesis.metrics.decide`; aparte, lo comprobé también sobre las 13 972 fotos de la prueba, cada una con su convenio.
-    Con una foto frente a un mueble no se ha probado todavía.
-  - *Sin probar en un local:* la alerta de otro mueble, la de una foto movida y repetir la foto tras una alerta.
+  - *23 de noviembre, en el mismo supermercado, con la decisión corregida* y el teléfono en modo avión. Fueron dos
+    envíos con el check out declarado. En el primero, la foto del check out no dio alerta. En el segundo repetí la
+    foto tres veces antes de que pasara:
+    1. Una foto movida a propósito dio «Foto inservible» en 245 ms.
+    2. La foto de una cabecera de detergentes de otro proveedor dio «Parece otro mueble: se ve un mueble tipo
+       cabecera, pero declaraste check out» en 329 ms. Es el caso de la
+       [verificación contra el convenio](#verificación-contra-el-convenio): en el computador, la red le da 0.965 a
+       cabecera y 0.009 a check out; la decisión restringida de antes la habría aceptado como check out sin alerta.
+    3. Una foto del piso dio «Foto inservible» en 290 ms.
+    4. La foto del check out no dio alerta y volvió sola al formulario.
+
+    Cada «Repetir la foto» volvió a abrir la cámara, y el envío llegó a Central con la última foto al quitar el modo
+    avión. La evaluación en el computador, con el mismo .tflite, decide lo mismo que el teléfono en las cinco fotos.
+    Queda grabada la pantalla. Las fotos adicionales del formulario no pasan por el prototipo, por diseño del
+    formulario.
 
 ### Diferencias entre el teléfono y la evaluación
 
