@@ -254,6 +254,25 @@ def cambios(run, formato="model_fp16"):
     print(f"probabilidad máxima de la evaluación: mediana {np.median(ev.max(1)):.3f} en todas y "
           f"{np.median(ev.max(1)[otra]):.3f} en las que cambian de clase; con p ≥ 0.9 hay {(ev.max(1) >= .9).sum()} "
           f"fotos y cambian {(otra & (ev.max(1) >= .9)).sum()}")
+    # Aceptar o rechazar no es lo mismo que alertar: la alerta compara la decisión con el mueble declarado, así que
+    # también cambia si la foto pasa de un mueble a otro. Se mide sobre las fotos de ODK que declaran un mueble, con
+    # la decisión con umbral, como odk_umbral_* de tesis.metrics.evaluate_run.
+    from .evidencia import umbral
+    from .metrics import IDX, MUEBLES, contract_keys, contracts, decide
+    conv = pd.read_csv("data/convenios.csv")
+    tau, con, keys = umbral(run, conv), contracts(conv), contract_keys(test, conv)
+    m = ((test.source == "odk") & test.declarado.isin(MUEBLES)).to_numpy()
+    dec = test.declarado[m].map(IDX).to_numpy()
+    a_ev, a_tel = (decide(p[m], keys[m], con, tau) != dec for p in (ev, tel))
+    ok = y[m] == dec
+    print(f"alertas en las {m.sum()} fotos de ODK con un mueble declarado (τ = {tau:.2f}): cambian en "
+          f"{(a_ev != a_tel).sum()}; de ellas {(a_ev != a_tel)[ok].sum()} muestran lo declarado y "
+          f"{(a_ev != a_tel)[~ok].sum()} son errores de campo; alertas: evaluación {a_ev.sum()}, emulación {a_tel.sum()}")
+    for i in np.flatnonzero(a_ev != a_tel):
+        j = np.flatnonzero(m)[i]
+        print(f"   {test.label.iat[j]}, declarada {test.declarado.iat[j]}: evaluación {CLASSES[ev[j].argmax()]} "
+              f"({ev[j].max():.2f}, {'alerta' if a_ev[i] else 'sin alerta'}), emulación {CLASSES[tel[j].argmax()]} "
+              f"({tel[j].max():.2f}, {'alerta' if a_tel[i] else 'sin alerta'})")
 
 
 def paquete(destino):

@@ -254,7 +254,10 @@ puede caer en uno contratado, y la discrepancia se convierte en coincidencia. La
 la clase más probable $c^*$ cuando es un rechazo, un mueble del convenio, o un mueble fuera del convenio con
 probabilidad $p(c^*) \geq \tau$. Solo si esa evidencia no alcanza se decide dentro del convenio. El umbral $\tau$
 se calibra con la validación de cada red: es el que maximiza la detección de un mueble fuera del convenio menos
-las falsas alarmas, es decir, el índice de Youden~\cite{youden1950}. La prueba no interviene.
+las falsas alarmas, es decir, el índice de Youden~\cite{youden1950}. La prueba no interviene en el umbral, pero sí
+en el origen de la regla: la falla de la restricción se identificó al analizar los resultados de la prueba, y la
+regla se introdujo después, como corrección durante el análisis experimental. Sus resultados en la prueba son
+reproducibles, pero no constituyen una estimación independiente.
 
 La verificación se evalúa con dos experimentos que no miden lo mismo. En los \emph{pares por intercambio}, cada
 fotografía histórica de un mueble del convenio se declara como cada mueble del local: declararla como otro es una
@@ -408,13 +411,15 @@ las arquitecturas eficientes: MobileNetV3-Large cae a 0.594, una caída de 0.325
 y EfficientNet-B0 a 0.839, una caída de 0.081 [0.061, 0.106]. ResNet-50 lo resiste. Calibrar con las clases
 balanceadas no lo arregla (0.607 y 0.822).
 
-Un diagnóstico sobre 280 fotografías de la prueba, 40 por clase, descarta tres explicaciones. No es la
-calibración: con 1\,000 fotografías ninguna de las dos redes recupera el float32. No es un tipo de operación: al dejar en coma flotante
-cada tipo, uno a la vez, la mejor variante sube la exactitud de MobileNetV3-Large de 0.593 a 0.650, lejos del
-0.911 de float32. No es una capa: el error de cada operación por separado tiene una mediana de 0.29 pasos de
-cuantización. Lo que se observa son activaciones de rango muy amplio, compatibles con una pérdida repartida por
-toda la red, aunque el diagnóstico no lo prueba. Este diagnóstico describe por qué falla un formato ya evaluado;
-no se eligió ninguna configuración con él.
+Un diagnóstico sobre 280 fotografías de la prueba, 40 por clase, muestra que tres explicaciones simples no bastan
+por sí solas. La calibración no basta: con 1\,000 fotografías ninguna de las dos redes recupera el float32. Ningún
+tipo de operación lo explica solo: al dejar en coma flotante cada tipo, uno a la vez, la mejor variante sube la
+exactitud de MobileNetV3-Large de 0.593 a 0.650, lejos del 0.911 de float32. Ninguna capa lo explica sola: el
+error de cada operación por separado tiene una mediana de 0.29 pasos de cuantización. El diagnóstico no descarta
+otras causas: no se probaron combinaciones de operaciones ni la acumulación del error entre capas. Que la pérdida
+se reparta por toda la red, como sugieren activaciones de rango muy amplio, es una hipótesis compatible con lo
+observado, no un resultado. Este diagnóstico describe por qué falla un formato ya evaluado; no se eligió ninguna
+configuración con él.
 
 En el dispositivo, las 17 combinaciones medidas cumplen la latencia y la memoria con holgura
 (tabla~\ref{tab:formatos}). La más lenta, ResNet-50 en float16, tiene un p95 de 230~ms, trece veces bajo el
@@ -518,17 +523,31 @@ MobileNetV3-Large & 0.805 & 0.782 & $-0.023$ $[-0.040, -0.008]$ \\
 El teléfono y la evaluación dan la misma clase en las 120 fotografías como las guarda ODK y en 51 de las 53
 capturas a resolución de cámara. Para explicar las dos diferencias se repitió en Python el preprocesamiento del
 teléfono, paso a paso, comparando cada variante con las probabilidades que dio el teléfono. La orientación no es
-la causa: enderezar la fotografía antes o después de reducirla da los mismos resultados. La causa es el
-redimensionamiento. La evaluación reduce con el filtro de Lanczos y el teléfono con mitades bilineales; al emular
-la reducción del teléfono, la diferencia mediana de probabilidad baja de 0.024 a 0.007. Contribuye también que la
-evaluación lee una copia recomprimida en JPEG y el teléfono no. Las dos fotografías son capturas inválidas en que
-el modelo duda, con probabilidad máxima de 0.35; en una, el teléfono la acepta como mueble y la evaluación la
-rechaza.
+la causa: enderezar la fotografía antes o después de reducirla da los mismos resultados. El redimensionamiento
+explica la mayor parte: la evaluación reduce con el filtro de Lanczos y el teléfono con mitades bilineales, y al
+emular la reducción del teléfono la diferencia mediana de probabilidad baja de 0.024 a 0.007. Contribuye también
+que la evaluación lee una copia recomprimida en JPEG y el teléfono no. Lo que queda no está explicado: la
+emulación sigue a 0.007 del teléfono y no reproduce una de las dos diferencias. Que venga del decodificador JPEG o
+del escalado de Android es una hipótesis que no se probó. Las dos fotografías son capturas inválidas en que el
+modelo duda, con probabilidad máxima de 0.35; en una, el teléfono la acepta como mueble y la evaluación la rechaza.
 
 Con esa emulación, que reproduce la clase del teléfono en 172 de las 173 fotografías medidas, se procesó toda la
-prueba. La clase cambia en 80 de las 13\,972 fotografías (0.57\%) y la decisión de aceptar o rechazar, en 15
-(0.11\%), ninguna entre las 12\,787 en que el modelo da una probabilidad de 0.9 o más. Las métricas no se
-mueven: el recall de captura inválida es el mismo. Es una emulación y no una medición en el teléfono.
+prueba. Es una emulación y no una medición en el teléfono. La clase cambia en 80 de las 13\,972 fotografías
+(0.57\%) y la decisión de aceptar o rechazar, en 15 (0.11\%), ninguna entre las 12\,787 en que el modelo da una
+probabilidad de 0.9 o más. El recall de captura inválida es el mismo.
+
+Esa cifra no mide las alertas. Aceptar o rechazar solo cambia cuando la fotografía pasa entre una categoría de
+rechazo y una de mueble. La alerta compara la decisión con el mueble declarado, y cambia también cuando la
+fotografía pasa de un mueble a otro o cuando su probabilidad cruza $\tau$. Sobre las 1\,148 fotografías de ODK con
+un mueble declarado y la decisión con umbral, la alerta cambia en 3:
+\begin{itemize}
+\item una fotografía correcta deja de dar falsa alarma;
+\item un error de campo pasa a detectarse;
+\item otro error deja de detectarse.
+\end{itemize}
+Los errores detectados quedan en 67 de 73 y las falsas alarmas pasan de 32 a 31. La primera cifra mide cuánto
+cambia el filtro de fotografías inservibles o ajenas; la segunda, cuánto cambia lo que ve quien verifica la
+exhibición.
 
 \subsection{Viabilidad}
 
@@ -555,14 +574,20 @@ las capturas inválidas reales, que el modelo confunde con contenido ajeno o con
 distingue algo en la imagen.
 
 El trabajo deja además dos resultados sobre la verificación. Restringir la decisión al convenio, como estaba
-previsto, hace pasar por contratado un mueble que el convenio no lista; conservar la predicción cuando hay
-evidencia de otro mueble lo corrige con un costo acotado en falsas alarmas. Y la detección medida con discrepancias
+previsto, hace pasar por contratado un mueble que el convenio no lista. Conservar la predicción cuando hay
+evidencia de otro mueble lo corrige en la prueba con un costo acotado en falsas alarmas. Como la corrección se
+introdujo después de ver esa prueba, falta confirmarla con fotografías nuevas. Y la detección medida con discrepancias
 construidas (99.3\%) sobreestima la de campo (67 de 73 errores reales).
 
 \subsection{Limitaciones}
 
 \textbf{Capturas inválidas.} Las 90 de la prueba son pocas, 62 son inducidas y provienen de 16 locales. El
 resultado establece que el criterio no se cumple, no cuánto falta en producción.
+
+\textbf{Decisión con umbral.} La regla se introdujo durante el análisis, después de identificar la falla en la
+prueba. El umbral sale de la validación y no se reentrenó ningún modelo, pero la exactitud de 0.974 y las demás
+cifras de la verificación con umbral son reproducibles, no independientes: su generalización debe confirmarse con
+fotografías de campo nuevas que no hayan participado en el análisis.
 
 \textbf{Cobertura de la verificación.} Las maestras cubren el 43\% de la prueba y no traen los muebles ganados
 en negociación. Los errores reales de campo son 73.
@@ -576,7 +601,8 @@ umbral, una cabecera fotografiada en un local que solo tiene check out dio la al
 restringida la habría aceptado), y una fotografía movida y otra del piso dieron la de fotografía inservible.
 
 \textbf{Diagnóstico del int8.} Se hizo con fotografías de la prueba. Sirve para describir; si se buscara una
-variante de int8 para usarla, la comparación tendría que hacerse con validación.
+variante de int8 para usarla, la comparación tendría que hacerse con validación. Muestra que ninguna causa simple
+basta por sí sola, pero no identifica la causa de la degradación.
 
 \subsection{Trabajo futuro}
 

@@ -13,7 +13,8 @@ No lleva fotos. Lleva:
                    train/val/test.csv, probs_<formato>.npy (predicciones sobre la prueba), val_probs_<formato>.npy
                    (sobre la validación: calibran el umbral del verificador) y metrics_<formato>.json
   dispositivo/     mediciones originales del Honor X6b (dispositivo*.csv del modelo solo, fotos_* del prototipo)
-  codigo/          el paquete tesis, los cuadernos, las pruebas y la planificación con que se generó todo
+  codigo/          el paquete tesis, los cuadernos, las pruebas, la decisión del prototipo (Clasificador.java) y la
+                   planificación con que se generó todo
 
 En Colab lo arma la última celda de entrenar_tesis con los runs de Drive; lo que sale de data/ viaja en
 tesis_colab.zip (tesis.export). Las bitácoras van sin la ruta de origen de cada foto, que nombra al mercaderista:
@@ -32,7 +33,8 @@ from .metrics import IDX, calibrar_umbral, contract_keys, contracts, evaluate_ru
 
 DATOS = ("manifest.csv", "particion.csv", "stores_split.csv", "convenios.csv", "convenios_emparejamiento.csv",
          "locales.csv", "revisiones.csv", "auditoria.csv", "auditoria_concordancia.csv")
-CODIGO = ("tesis/*.py", "tests/*.py", "notebooks/*.ipynb", "docs/*.md", "android/README.md", "README.md",
+CODIGO = ("tesis/*.py", "tests/*.py", "notebooks/*.ipynb", "docs/*.md", "android/README.md",
+          "android/app/src/main/java/ec/usfq/tesis/Clasificador.java", "README.md",
           "requirements.txt")
 
 
@@ -178,7 +180,12 @@ def leeme(files, runs, reducido=False):
             "del README, y con el `metrics_<formato>.json` que escribió cada evaluación al terminar de entrenar.", "",
             "La tabla usa `datos/convenios.csv`, que sale de las maestras de muebles de Industrias Ales "
             "(`tesis.convenios`), no de las etiquetas de las fotos. Cada fila es una corrida y un formato; las columnas "
-            "están descritas en `tesis.metrics.evaluate_run` y `tesis.metrics.verification`.", ""]
+            "están descritas en `tesis.metrics.evaluate_run` y `tesis.metrics.verification`.", "",
+            "## Pruebas unitarias", "", "```", "pip install pytest pillow", "cd codigo", "python -m pytest tests", "```",
+            "", "Una de ellas compila `Clasificador.decidir`, la decisión del prototipo Android "
+            "(`codigo/android/app/src/main/java/ec/usfq/tesis/Clasificador.java`), y comprueba que decide igual que "
+            "`tesis.metrics.decide`. Necesita un JDK (`javac` en el PATH o en `JAVA_HOME`); sin él, esa prueba se "
+            "salta.", ""]
     return "\n".join(out)
 
 

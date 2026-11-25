@@ -167,7 +167,8 @@ Entre corchetes va el intervalo de Wilson al 95 %. Los umbrales de la tabla 5.7 
   no lo arregla: 0.607 y 0.822.
 - **Verificación contra el convenio** (MobileNetV3). Con la decisión corregida, que ya no restringe a ciegas al
   convenio, las falsas alarmas son 1.5 % en los pares por intercambio (el límite es 5 %) y 3.0 % en las declaraciones
-  reales de ODK, donde se detectan 67 de 73 errores de campo. El detalle, la cobertura y la diferencia entre los dos
+  reales de ODK, donde se detectan 67 de 73 errores de campo. Es una corrección que hice durante el análisis, después
+  de ver la prueba: falta confirmarla con fotos de campo nuevas. El detalle, la cobertura y la diferencia entre los dos
   experimentos están [más abajo](#verificación-contra-el-convenio).
 - **Por cadena** (MobileNetV3). La exactitud va de 0.891 (Favorita, histórico) a 0.985 (Tía, ODK), sin contar las 7
   fotos de Liris. Los errores más frecuentes son lateral por exhibidor de piso (Tía y Santa María), exhibidor de piso
@@ -243,6 +244,12 @@ hay evidencia de que la foto muestra otro mueble. Solo si esa evidencia no alcan
 τ se calibra con la validación de cada red (`calibrar_umbral`): es el que maximiza la detección de un mueble fuera
 del convenio menos las falsas alarmas. La prueba no interviene. Sale 0.47 para MobileNetV3, 0.56 para EfficientNet-B0
 y 0.50 para ResNet-50.
+
+**Cuándo se introdujo.** Esta regla no estaba en la planificación. La falla de la restringida la encontré al
+analizar los resultados de la prueba, y la regla nueva la introduje después, durante el análisis experimental. Lo
+único que se ajusta, τ, sale de la validación, y no se reentrenó nada. Pero la prueba ya se había mirado cuando se
+diseñó la regla. Por eso la exactitud de 0.974 es reproducible, pero no es una estimación independiente: su
+generalización hay que confirmarla con fotos de campo nuevas, que no hayan pasado por este análisis.
 
 | MobileNetV3, en la prueba | Restringida al convenio | Sin restringir | Con umbral (τ = 0.47) |
 |---|---|---|---|
@@ -324,15 +331,22 @@ la prueba, 40 por clase. La tabla da la exactitud. El resultado es negativo: nin
 | int8 con un tipo de operación en float (el mejor de los probados) | 0.650 | 0.864 |
 | int8 con el 10 % de los tensores de más error en float | 0.614 | 0.814 |
 
-- **No es la calibración.** Ni más fotos ni clases balanceadas (arriba, sobre toda la prueba) lo arreglan.
-- **No es una operación.** Se dejó en float cada tipo de operación, uno a la vez. El mejor es la convolución en
-  profundidad en MobileNetV3 y la multiplicación en EfficientNet-B0. Con 280 fotos, diferencias de 0.03 entre
-  variantes no son significativas.
-- **No es una capa.** El error de cada operación por separado es chico: la mediana es 0.29 pasos de cuantización en
-  las dos redes, y el máximo, 2.0 en MobileNetV3 y 9.7 en EfficientNet-B0.
-- **Lo que sí se ve** son activaciones de rango muy amplio: hasta 558 en MobileNetV3 y 440 en EfficientNet-B0, donde
-  cada uno de los 256 niveles vale 2.2 y 1.7. Es compatible con una pérdida repartida por toda la red, pero el
-  diagnóstico no lo prueba.
+Lo que el diagnóstico respalda:
+
+- **La calibración no basta.** Ni más fotos ni clases balanceadas (arriba, sobre toda la prueba) lo arreglan.
+- **Ningún tipo de operación lo explica por sí solo.** Se dejó en float cada tipo de operación, uno a la vez. El
+  mejor es la convolución en profundidad en MobileNetV3 y la multiplicación en EfficientNet-B0, y ninguno se acerca a
+  float32. Con 280 fotos, diferencias de 0.03 entre variantes no son significativas.
+- **Ninguna capa lo explica por sí sola.** El error de cada operación por separado es chico: la mediana es 0.29 pasos
+  de cuantización en las dos redes, y el máximo, 2.0 en MobileNetV3 y 9.7 en EfficientNet-B0.
+
+Lo que sigue siendo hipótesis:
+
+- **Combinaciones e interacciones.** No probé dejar en float varios tipos de operación a la vez ni medí cómo se
+  acumula el error de una capa en las siguientes. Esas causas no quedan descartadas.
+- **Una pérdida repartida por toda la red.** Lo que se ve son activaciones de rango muy amplio: hasta 558 en
+  MobileNetV3 y 440 en EfficientNet-B0, donde cada uno de los 256 niveles vale 2.2 y 1.7. Es compatible con esa
+  explicación, pero el diagnóstico no la prueba.
 
 El detalle está en `int8_diagnostico.csv` e `int8_capas.csv` de cada run, dentro del paquete de evidencias.
 
@@ -422,13 +436,16 @@ teléfono, paso a paso, y compara cada variante con las probabilidades que dio e
 - **No es la orientación.** Enderezar la foto antes o después de reducirla da las mismas clases y las mismas
   diferencias. Las 173 fotos traen cinco valores de orientación EXIF (0, 1, 3, 6 y 8) y las dos partes los tratan
   igual.
-- **Es el redimensionamiento.** La evaluación reduce a 320 px con el filtro Lanczos de PIL; el teléfono, con mitades
-  bilineales, que es lo que Android ofrece. Con la reducción del teléfono emulada, la diferencia mediana baja de
-  0.024 a 0.007. Si a esa emulación se le cambia solo el filtro por Lanczos, vuelve a 0.026.
-- **Y la recompresión.** La evaluación lee la copia de 320 px guardada como JPEG de calidad 92; el teléfono pasa los
-  píxeles directo a la red. Sin esa recompresión, la evaluación da la clase del teléfono en las 53 fotos.
-- **Lo que queda** (0.007 de mediana) es lo que la emulación no reproduce: el decodificador JPEG y el escalado de
-  Android.
+- **El redimensionamiento explica la mayor parte.** La evaluación reduce a 320 px con el filtro Lanczos de PIL; el
+  teléfono, con mitades bilineales, que es lo que Android ofrece. Con la reducción del teléfono emulada, la
+  diferencia mediana baja de 0.024 a 0.007. Si a esa emulación se le cambia solo el filtro por Lanczos, vuelve a
+  0.026.
+- **La recompresión también cuenta.** La evaluación lee la copia de 320 px guardada como JPEG de calidad 92; el
+  teléfono pasa los píxeles directo a la red. Sin esa recompresión, la evaluación da la clase del teléfono en las 53
+  fotos.
+- **Lo que queda no está explicado.** La emulación sigue a 0.007 de mediana del teléfono y no reproduce su clase en
+  una de las dos fotos (la foto 2, abajo). Que el resto venga del decodificador JPEG o del escalado de Android es
+  una hipótesis: no lo probé.
 - En las 120 fotos como las guarda ODK, todas las variantes dan la clase del teléfono. La diferencia crece con el
   tamaño de la foto porque hay más que reducir.
 
@@ -464,6 +481,27 @@ reproduce su clase en 172 de las 173 fotos medidas. Frente a la evaluación, con
 - Cambian solo fotos en que el modelo duda. De las 12 787 fotos en que la evaluación da una probabilidad de 0.9 o
   más no cambia ninguna; en las que cambian, la mediana es 0.53.
 
+**Rechazar no es lo mismo que alertar.** Las 15 fotos de arriba solo cuentan los pasos entre una categoría de
+rechazo y una de mueble. La alerta que recibe el mercaderista compara la decisión con el mueble declarado. Puede
+cambiar también cuando la foto pasa de un mueble a otro, o cuando la probabilidad cruza τ, aunque las dos den la
+misma clase. Por eso la alerta se mide aparte, sobre las 1 148 fotos de ODK que declaran un mueble y con la
+decisión con umbral (τ = 0.47). Con la emulación, la alerta cambia en 3:
+
+| Foto | Declarada | Evaluación | Teléfono emulado |
+|---|---|---|---|
+| Contenido ajeno | cabecera | cabecera (0.59): sin alerta | contenido ajeno (0.54): alerta |
+| Exhibidor de piso | exhibidor de piso | cabecera (0.53): alerta | exhibidor de piso (0.66): sin alerta |
+| Lateral | exhibidor de piso | exhibidor de piso (0.41, bajo τ): alerta | exhibidor de piso (0.55): sin alerta |
+
+Con el teléfono emulado, la primera foto es un error de campo que solo él detecta y la segunda, una falsa alarma
+menos. La tercera es un error de campo que solo detecta la evaluación. Los errores detectados quedan en 67 de 73 y
+las falsas alarmas pasan de 32 a 31 de 1 075. Las dos cifras miden cosas distintas:
+
+- **Aceptar o rechazar** (15 de 13 972): cuánto cambia el filtro de fotos inservibles o ajenas.
+- **Alerta** (3 de 1 148): cuánto cambia lo que ve quien verifica la exhibición.
+
+`python -m tesis.fotos_app --cambios runs/final/A_mobilenetv3` da las dos.
+
 ## Desviaciones respecto de la planificación
 
 La planificación se sigue en lo siguiente:
@@ -495,8 +533,10 @@ Las desviaciones, que la memoria debe declarar, son estas:
   convenio con las etiquetas de las fotos.
 - **Decisión contra el convenio (5.6, 5.9).** La planificación restringe la predicción a los muebles del convenio.
   Así, una foto de un mueble que el convenio no lista pasa por uno contratado. La decisión conserva la clase más
-  probable cuando hay evidencia de otro mueble, con un umbral calibrado en validación. La exactitud condicionada de
-  la sección 5.6 se sigue reportando, sobre las fotos en que está definida.
+  probable cuando hay evidencia de otro mueble, con un umbral calibrado en validación. La introduje durante el
+  análisis, después de ver la prueba, así que su resultado falta confirmarlo con fotos nuevas
+  ([cuándo se introdujo](#verificación-contra-el-convenio)). La exactitud condicionada de la sección 5.6 se sigue
+  reportando, sobre las fotos en que está definida.
 - **Deduplicación (5.4).** Se quitan los cuasi-duplicados dentro del local (dhash ≤ 4) en lugar de reconstruir la
   visita. Entre locales se quita toda foto archivada en más de un local (hash idéntico; 672 fotos), porque no se sabe
   de cuál es. Esto se agregó al encontrar 92 fotos de prueba repetidas en otro local, y ahora ocurre antes del sorteo.

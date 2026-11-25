@@ -45,7 +45,7 @@ Se corren en Colab desde [`notebooks/entrenar_tesis.ipynb`](../notebooks/entrena
 | Módulo | Qué hace | Planificación |
 |---|---|---|
 | [`device.py`](device.py) | Latencia y memoria en el Honor X6b por adb: el modelo solo (A7) y el prototipo de extremo a extremo (A8). Es un solo archivo con la biblioteca estándar, para correrlo en cualquier computador | 5.6, 5.7 |
-| [`fotos_app.py`](fotos_app.py) | Elige las fotos reales de ODK con que se mide el prototipo, compara sus predicciones con las de la evaluación, emula en Python el preprocesamiento del teléfono para ver de dónde sale cada diferencia y arma el paquete para medir desde otro computador | 5.6 |
+| [`fotos_app.py`](fotos_app.py) | Elige las fotos reales de ODK con que se mide el prototipo, compara sus predicciones con las de la evaluación, emula en Python el preprocesamiento del teléfono para ver de dónde sale cada diferencia, cuenta cuántas decisiones de aceptar o rechazar y cuántas alertas cambia en la prueba, y arma el paquete para medir desde otro computador | 5.6 |
 
 ## Datos
 
